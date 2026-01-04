@@ -1,0 +1,8 @@
+[project]
+name = "rummi"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "ortools>=9.14.6206",
+]
