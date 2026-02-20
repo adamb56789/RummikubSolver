@@ -198,12 +198,12 @@ class TestRummi(unittest.TestCase):
     def test_locked_joker_can_add_group(self):
         result = find_best_move_strings(["a4 b4 J"], "r4", JOKER_LOCK_CONFIG)
 
-        expected = RummiResult.from_strings(["a4 b4 r4 J"], "r4", "")
+        expected = RummiResult.from_strings(["J a4 b4 r4"], "r4", "")
         self.assert_result_equal(expected, result)
 
         result = find_best_move_strings(["a4 b4 J"], "y4", JOKER_LOCK_CONFIG)
 
-        expected = RummiResult.from_strings(["a4 b4 y4 J"], "y4", "")
+        expected = RummiResult.from_strings(["J a4 b4 y4"], "y4", "")
         self.assert_result_equal(expected, result)
 
     def test_two_jokers_can_only_replace_one(self):
@@ -221,14 +221,26 @@ class TestRummi(unittest.TestCase):
 
     def test_jokers_compete_for_same_tile(self):
         result = find_best_move_strings(["J a4 a5 a6", "J a4 a5 a6"], "a3 r6 r6 b6 b6", JOKER_LOCK_CONFIG)
+        # Table                               Tiles in play     Rack
+        # ["J a4 a5 a6", "J a4 a5 a6"]        ""                "a3 r6 r6 b6 b6"
+        # ["J a4 a5 a6", "a3 a4 a5 a6"]       "J"               "r6 r6 b6 b6"
+        # ["J a4 a5 a6", "a3 a4 a5"]          "J a6"            "r6 r6 b6 b6"
+        # ["J a4 a5 a6", "a3 a4 a5", "a6 b6 r6", "a6 b6 J"]
 
-        expected = RummiResult.from_strings(["J a4 a5 a6", "a3 a4 a5", "a6 b6 r6"], "a3 r6 b6", "r6 b6")
+        expected = RummiResult.from_strings(["J a4 a5 a6", "a3 a4 a5", "a6 b6 r6", "b6 r6 J"], "a3 r6 r6 b6 b6", "")
         self.assert_result_equal(expected, result)
 
     def test_either_colour_can_replace_joker_in_group(self):
         result = find_best_move_strings(["J a2 b2", "y3 y4 y5"], "r2 y2 b7 b8", JOKER_LOCK_CONFIG)
 
         expected = RummiResult.from_strings(["a2 b2 r2 y2", "y3 y4 y5", "b7 b8 J"], "r2 y2 b7 b8", "")
+        self.assert_result_equal(expected, result)
+
+    def test_two_jokers_subbed_by_two_of_same_tile(self):
+        result = find_best_move_strings(["J a2 a3 a4", "J a2 a3 a4"], "a1 b4 r4 a1 b4 r4", JOKER_LOCK_CONFIG)
+
+        table = ["a1 a2 a3 a4", "a1 a2 a3 a4", "b4 r4 J", "b4 r4 J"]
+        expected = RummiResult.from_strings(table, "a1 b4 r4 a1 b4 r4", "")
         self.assert_result_equal(expected, result)
 
     def assert_sets_equal(self, expected_sets: list[str], actual_sets: list[tuple[Tile, ...]]):
