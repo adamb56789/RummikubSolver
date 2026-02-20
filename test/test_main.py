@@ -3,7 +3,10 @@ import unittest
 from collections import Counter
 from itertools import product
 
-from rummi import Tile, MaximizeMode, JokerMode, find_best_move, Config, find_best_move_strings
+from rummi import find_best_move, find_best_move_strings
+from structs import Tile, MaximizeMode, JokerMode, Config, RummiResult
+
+JOKER_LOCK_CONFIG = Config(JokerMode.LOCKING, MaximizeMode.VALUE_PLACED, joker_value=0)
 
 ALL_TILES_STRINGS = [c + str(val) for c, val in product("brya", range(1, 14))] * 2
 ALL_TILES_STRINGS_WITH_JOKERS = ALL_TILES_STRINGS + ["J"] * 2
@@ -61,6 +64,10 @@ class TestRummi(unittest.TestCase):
 
     def test_handles_duplicates(self):
         self.validate_sets("a1 b1 r2 y2 a1 a2 a3", 4)
+
+    def test_group_order_does_not_matter(self):
+        self.validate_sets("y1", 0, table_set_strings=["a1 b1 r1"])
+        self.validate_sets("y1", 0, table_set_strings=["b1 a1 r1"])
 
     def test_joker(self):
         self.validate_sets("a1 b1 r2 y2 a1 a2 a3 J0 J0", 0)
@@ -142,20 +149,92 @@ class TestRummi(unittest.TestCase):
 
     def test_minimize_rearrange(self):
         # To ensure the model doesn't just happen to pick the right one, we test it can both minimize and maximize rearrangement
-
         config = Config(JokerMode.FREE, MaximizeMode.TILES_PLACED, rearrange_value=1 / 40)
         result = find_best_move_strings(["a1 a2 a3", "r1 r2 r3", "b1 b2 b3"], "a4 r4 b4", config)
 
-        expected_table = ["a1 a2 a3", "r1 r2 r3", "b1 b2 b3", "b4 r4 a4"]
-        self.assertCountEqual([tuple(Tile.from_str(s)) for s in expected_table], result.table)
+        self.assert_sets_equal(["a1 a2 a3", "r1 r2 r3", "b1 b2 b3", "a4 b4 r4"], result.table)
 
         config = Config(JokerMode.FREE, MaximizeMode.TILES_PLACED, rearrange_value=-1 / 40)
         result = find_best_move_strings(["a1 a2 a3", "r1 r2 r3", "b1 b2 b3"], "a4 r4 b4", config)
 
-        expected_table = ["b1 r1 a1", "b2 r2 a2", "b3 r3 a3", "b4 r4 a4"]
-        self.assertCountEqual([tuple(Tile.from_str(s)) for s in expected_table], result.table)
+        self.assert_sets_equal(["a1 b1 r1", "a2 b2 r2", "a3 b3 r3", "a4 b4 r4"], result.table)
 
     def test_joker_locked_cannot_move(self):
+        result = find_best_move_strings(["J a4 a5 a6"], "r1 r2", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["J a4 a5 a6"], "", "r1 r2")
+        self.assert_result_equal(expected, result)
+
+    def test_joker_locked_cannot_move_group(self):
+        result = find_best_move_strings(["J a4 b4 y4"], "r2 r3", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["J a4 b4 y4"], "", "r2 r3")
+        self.assert_result_equal(expected, result)
+
+    def test_joker_locked_with_sub_can_move(self):
+        result = find_best_move_strings(["J a4 a5"], "r1 r2 a3", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["a3 a4 a5", "r1 r2 J"], "r1 r2 a3", "")
+        self.assert_result_equal(expected, result)
+
+    def test_joker_locked_with_sub_can_move_group(self):
+        result = find_best_move_strings(["a4 b4 J"], "y4 r2 r3", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["a4 b4 y4", "r2 r3 J"], "y4 r2 r3", "")
+        self.assert_result_equal(expected, result)
+
+    def test_locked_joker_cannot_take_other_tiles(self):
+        result = find_best_move_strings(["J y2 y3 y4 y5 y6"], "b6 a6", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["J y2 y3 y4 y5 y6"], "", "b6 a6")
+        self.assert_result_equal(expected, result)
+
+    def test_locked_joker_can_add(self):
+        result = find_best_move_strings(["y3 y4 J y6 y7 y8 y9 y10 y11 y12"], "y1 y2 y13", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["y1 y2 y3 y4 J y6 y7 y8 y9 y10 y11 y12 y13"], "y1 y2 y13", "")
+        self.assert_result_equal(expected, result)
+
+    def test_locked_joker_can_add_group(self):
+        result = find_best_move_strings(["a4 b4 J"], "r4", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["a4 b4 r4 J"], "r4", "")
+        self.assert_result_equal(expected, result)
+
+        result = find_best_move_strings(["a4 b4 J"], "y4", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["a4 b4 y4 J"], "y4", "")
+        self.assert_result_equal(expected, result)
+
+    def test_two_jokers_can_only_replace_one(self):
+        result = find_best_move_strings(["J a4 a5", "J y2 y3 y4 y5 y6"], "r1 r2 a3 b6 a6", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["J y2 y3 y4 y5 y6", "a3 a4 a5", "a6 b6 J"], "a3 b6 a6", "r1 r2")
+        self.assert_result_equal(expected, result)
+
+        # Check that we can manipulate both if not joker locking
         config = Config(JokerMode.FREE, MaximizeMode.VALUE_PLACED, joker_value=0)
-        result = find_best_move_strings(["J a2 a3 a4"], "r1 r2", config)
-        print(result)
+        result = find_best_move_strings(["J a4 a5", "J y2 y3 y4 y5 y6"], "r1 r2 a3 b6 a6", config)
+
+        expected = RummiResult.from_strings(["y2 y3 y4 y5 y6", "a3 a4 a5", "a6 b6 J", "r1 r2 J"], "r1 r2 a3 b6 a6", "")
+        self.assert_result_equal(expected, result)
+
+    def test_jokers_compete_for_same_tile(self):
+        result = find_best_move_strings(["J a4 a5 a6", "J a4 a5 a6"], "a3 r6 r6 b6 b6", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["J a4 a5 a6", "a3 a4 a5", "a6 b6 r6"], "a3 r6 b6", "r6 b6")
+        self.assert_result_equal(expected, result)
+
+    def test_either_colour_can_replace_joker_in_group(self):
+        result = find_best_move_strings(["J a2 b2", "y3 y4 y5"], "r2 y2 b7 b8", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["a2 b2 r2 y2", "y3 y4 y5", "b7 b8 J"], "r2 y2 b7 b8", "")
+        self.assert_result_equal(expected, result)
+
+    def assert_sets_equal(self, expected_sets: list[str], actual_sets: list[tuple[Tile, ...]]):
+        self.assertCountEqual([tuple(Tile.from_str(s)) for s in expected_sets], actual_sets)
+
+    def assert_result_equal(self, expected: RummiResult, actual: RummiResult):
+        self.assertCountEqual(expected.table, actual.table)
+        self.assertCountEqual(expected.placed, actual.placed)
+        self.assertCountEqual(expected.remaining, actual.remaining)
