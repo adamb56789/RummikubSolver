@@ -228,15 +228,12 @@ def prepare_joker_params(tile_set: tuple[Tile, ...]) -> JokerParams:
 
     set_to_index_map = {s: i for i, s in enumerate(sets)}
 
-    table_sets_array = np.zeros((len(sets)), int)
-    table_sets_array[set_to_index_map[tile_set]] = 1
-
     set_tile_matrix = np.zeros((len(TILES), len(sets)), int)
     for tiles, j in set_to_index_map.items():
         for t in tiles:
             set_tile_matrix[t.index(), j] += 1
 
-    return JokerParams(set_to_index_map, table_sets_array, set_tile_matrix, substitution_tile_array, sets)
+    return JokerParams(set_to_index_map, set_tile_matrix, substitution_tile_array, sets)
 
 
 def solve_cp_model(
@@ -255,7 +252,13 @@ def solve_cp_model(
     joker_placed_sets_vars = []
     for k, params in enumerate(joker_params):
         joker_placed_sets_vars.append(
-            model.new_int_var_series(f"joker_placed_sets_{k}", pd.Index(range(len(params.sets))), 0, 1))
+            model.new_bool_var_series(f"joker_{k}_placed_sets", pd.Index(range(len(params.sets)))))
+
+    # true iff joker_k uses tile_i as its substitution
+    subbed_tile = {}
+    for k, params in enumerate(joker_params):
+        for i in np.nonzero(params.substitution_tile_array)[0]:
+            subbed_tile[k, i] = model.new_bool_var(f"joker_{k}_takes_tile_{i}")
 
     for i in range(len(TILES)):
         # The first constraint ensures that you can only make sets of the tiles that are on your rack or on the
@@ -266,8 +269,8 @@ def solve_cp_model(
         standard_term = sum(SET_TILE_MATRIX[i, j] * placed_sets_var[j] for j in np.nonzero(SET_TILE_MATRIX[i])[0])
         joker_term = sum(
             sum(
-                params.set_tile_matrix[i, j] * joker_placed_sets_vars[k][j]
-                for j in np.nonzero(params.set_tile_matrix[i])[0]
+                params.set_tile_matrix[i, l] * joker_placed_sets_vars[k][l]
+                for l in np.nonzero(params.set_tile_matrix[i])[0]
             )
             for k, params in enumerate(joker_params)
         )
@@ -277,38 +280,19 @@ def solve_cp_model(
         # the tiles that are on your rack.
         model.add(placed_tiles_var[i] <= rack_tiles_array[i])
 
-    # true iff joker_k uses tile_i as its substitution
-    subbed_tile = {}
-    for k, params in enumerate(joker_params):
-        for i in np.nonzero(params.substitution_tile_array)[0]:
-            subbed_tile[k, i] = model.new_bool_var(f"joker_{k}_takes_tile_{i}")
-
-    # For joker_k to be subbed by tile_i, the tile must be placed
-    for (k, i), b in subbed_tile.items():
-        model.add(placed_tiles_var[i] >= 1).only_enforce_if(b)
-
     # Enforce that enough tiles are placed to satisfy the claims
     for i in range(len(TILES)):
-        claimers = [subbed_tile[k, i] for k, params in enumerate(joker_params) if (k, i) in subbed_tile]
+        claimers = [subbed_tile[k, i] for k in range(len(joker_params)) if (k, i) in subbed_tile]
         if claimers:
             model.add(sum(claimers) <= placed_tiles_var[i])
 
-    # true iff joker_i is substituted
-    jokers_subbed = []
     for k, params in enumerate(joker_params):
-        joker_is_subbed = model.new_bool_var(f"joker_{k}_is_subbed")
-        jokers_subbed.append(joker_is_subbed)
-
-        # All the joker takes tile cases for this joker
-        owned_tiles = [subbed_tile[k, i] for i in np.nonzero(params.substitution_tile_array)[0]]
-
-        # Joker k is subbed if any of the joker takes tile cases are true
-        model.add_max_equality(joker_is_subbed, owned_tiles)
-
-    for k in range(len(joker_params)):
         # Can either use one of the joker's sets (leave it alone or add to it), or substitute it, not both
         joker_sets_used = sum(joker_placed_sets_vars[k])
-        model.add(joker_sets_used != jokers_subbed[k])
+        tiles_subbing_for_joker = sum(subbed_tile[k, i] for i in np.nonzero(params.substitution_tile_array)[0])
+
+        # Either use exactly one joker-set OR substitute with exactly one tile
+        model.add(joker_sets_used + tiles_subbing_for_joker == 1)
 
     for j in range(len(SETS)):
         # Unmodified sets are maximized in the optimization step, so it chooses the highest value <= both the table

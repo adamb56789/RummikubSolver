@@ -230,6 +230,14 @@ class TestRummi(unittest.TestCase):
         expected = RummiResult.from_strings(["J a4 a5 a6", "a3 a4 a5", "a6 b6 r6", "b6 r6 J"], "a3 r6 r6 b6 b6", "")
         self.assert_result_equal(expected, result)
 
+    def test_jokers_compete_for_same_tile_strict(self):
+        # a7 can illegally sub for both jokers to place all tiles
+        # check that this is prevented and it can only sub for one of them
+        result = find_best_move_strings(["a4 a5 a6 J", "J a8 a9 a10"], "a7 b4 r4 b10", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["a4 a5 a6 J", "a7 a8 a9", "a10 b10 J",], "a7 b10", "b4 r4")
+        self.assert_result_equal(expected, result)
+
     def test_either_colour_can_replace_joker_in_group(self):
         result = find_best_move_strings(["J a2 b2", "y3 y4 y5"], "r2 y2 b7 b8", JOKER_LOCK_CONFIG)
 
@@ -241,6 +249,12 @@ class TestRummi(unittest.TestCase):
 
         table = ["a1 a2 a3 a4", "a1 a2 a3 a4", "b4 r4 J", "b4 r4 J"]
         expected = RummiResult.from_strings(table, "a1 b4 r4 a1 b4 r4", "")
+        self.assert_result_equal(expected, result)
+
+    def test_one_joker_could_be_subbed_twice_but_is_not(self):
+        result = find_best_move_strings(["a4 b4 J"], "a4 r4 y4", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["a4 b4 J", "a4 r4 y4"], "a4 r4 y4", "")
         self.assert_result_equal(expected, result)
 
     def assert_sets_equal(self, expected_sets: list[str], actual_sets: list[tuple[Tile, ...]]):

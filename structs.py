@@ -64,11 +64,6 @@ class JokerParams:
     Mapping from tuple tile sets to their "set index" in the other data structures
     """
 
-    table_sets_array: ndarray
-    """
-    1d array where each element is the count of sets of that index on the table
-    """
-
     set_tile_matrix: ndarray
     """
     2d array where each column corresponds to a set, and each value in the column is the count of the corresponding tile in that set 
