@@ -3,7 +3,7 @@ import unittest
 from collections import Counter
 from itertools import product
 
-from rummi import find_best_move, find_best_move_strings
+from rummi import find_best_move, find_best_move_strings, SETS
 from structs import Tile, MaximizeMode, JokerMode, Config, RummiResult
 
 JOKER_LOCK_CONFIG = Config(JokerMode.LOCKING, MaximizeMode.VALUE_PLACED, joker_value=0)
@@ -32,8 +32,6 @@ class TestRummi(unittest.TestCase):
         config = Config(joker_mode=JokerMode.FREE, maximize_mode=MaximizeMode.TILES_PLACED)
         result = find_best_move(table_sets, rack_tiles, config)
 
-        print(result)
-
         self.assertEqual(
             sum(len(s) for s in table_sets) + len(rack_tiles) - expected_remaining,
             sum(len(s) for s in result.table), result
@@ -45,7 +43,6 @@ class TestRummi(unittest.TestCase):
             before_sets = Counter(table_sets)
             after_sets = Counter(result.table)
             unmodified_sets = before_sets & after_sets
-            print("Unmodified sets:", len(unmodified_sets))
 
             self.assertEqual(expected_unmodified, len(unmodified_sets))
 
@@ -83,6 +80,14 @@ class TestRummi(unittest.TestCase):
         expected_remaining = [9, 12, 9, 8, 9, 11, 13, 16, 8, 4]
         for expected in expected_remaining:
             tiles = " ".join(random.sample(ALL_TILES_STRINGS, k=50))
+            with self.subTest(msg=tiles):
+                self.validate_sets(tiles, expected)
+
+    def test_random_tiles_with_jokers(self):
+        random.seed(0)
+        expected_remaining = [3, 5, 7, 7, 7, 11, 16, 7, 8, 9]
+        for expected in expected_remaining:
+            tiles = " ".join(random.sample(ALL_TILES_STRINGS_WITH_JOKERS, k=50))
             with self.subTest(msg=tiles):
                 self.validate_sets(tiles, expected)
 
@@ -235,7 +240,7 @@ class TestRummi(unittest.TestCase):
         # check that this is prevented and it can only sub for one of them
         result = find_best_move_strings(["a4 a5 a6 J", "J a8 a9 a10"], "a7 b4 r4 b10", JOKER_LOCK_CONFIG)
 
-        expected = RummiResult.from_strings(["a4 a5 a6 J", "a7 a8 a9", "a10 b10 J",], "a7 b10", "b4 r4")
+        expected = RummiResult.from_strings(["a4 a5 a6 J", "a7 a8 a9", "a10 b10 J", ], "a7 b10", "b4 r4")
         self.assert_result_equal(expected, result)
 
     def test_either_colour_can_replace_joker_in_group(self):
@@ -270,15 +275,70 @@ class TestRummi(unittest.TestCase):
         self.assert_result_equal(expected, result)
 
     def test_ambiguous_two_joker_set_can_be_run(self):
-        result = find_best_move_strings(["a1 J J"], "a3", JOKER_LOCK_CONFIG)
+        result = find_best_move_strings(["a1 J J"], "a3 y4 y5", JOKER_LOCK_CONFIG)
 
-        expected = RummiResult.from_strings(["a1 J a3"], "a3", "")
+        expected = RummiResult.from_strings(["a1 J a3", "y4 y5 J"], "a3 y4 y5", "")
         self.assert_result_equal(expected, result)
 
     def test_ambiguous_two_joker_set_can_be_group(self):
         result = find_best_move_strings(["a1 J J"], "b1 y4 y5", JOKER_LOCK_CONFIG)
 
-        expected = RummiResult.from_strings(["J a1 b1", "J y4 y5"], "b1 y4 y5", "")
+        expected = RummiResult.from_strings(["J a1 b1", "y4 y5 J"], "b1 y4 y5", "")
+        self.assert_result_equal(expected, result)
+
+    def test_random_two_sets_on_table_with_one_joker_each_locking(self):
+        random.seed(0)
+        expected_placed_list = [10, 9, 6, 7, 7, 7, 10, 9, 10, 4]
+        for expected_placed in expected_placed_list:
+            sets_with_no_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 0]
+            sets_with_one_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 1]
+            table_sets = random.choices(sets_with_one_joker, k=2) + random.choices(sets_with_no_joker, k=10)
+
+            rack_string = " ".join(random.sample(ALL_TILES_STRINGS, k=10))
+
+            with self.subTest(msg=rack_string):
+                result = find_best_move(table_sets, Tile.from_str(rack_string), JOKER_LOCK_CONFIG)
+                self.assertEqual(expected_placed, len(result.placed))
+
+    def test_random_one_set_on_table_with_both_jokers_locking(self):
+        random.seed(0)
+        expected_placed_list = [6, 8, 8, 9, 8, 7, 3, 2, 8, 5]
+        for expected_placed in expected_placed_list:
+            sets_with_no_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 0]
+            sets_with_two_jokers = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 2]
+            table_sets = random.choices(sets_with_two_jokers, k=1) + random.choices(sets_with_no_joker, k=10)
+
+            rack_string = " ".join(random.sample(ALL_TILES_STRINGS, k=10))
+
+            with self.subTest(msg=rack_string):
+                result = find_best_move(table_sets, Tile.from_str(rack_string), JOKER_LOCK_CONFIG)
+                self.assertEqual(expected_placed, len(result.placed))
+
+    def test_random_one_set_on_table_with_one_joker_and_joker_on_rack_locking(self):
+        random.seed(0)
+        expected_placed_list = [9, 9, 9, 11, 8, 9, 7, 7, 8, 6]
+        for expected_placed in expected_placed_list:
+            sets_with_no_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 0]
+            sets_with_one_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 1]
+            table_sets = random.choices(sets_with_one_joker, k=1) + random.choices(sets_with_no_joker, k=10)
+
+            rack_string = " ".join(random.sample(ALL_TILES_STRINGS, k=10)) + " J"
+
+            with self.subTest(msg=rack_string):
+                result = find_best_move(table_sets, Tile.from_str(rack_string), JOKER_LOCK_CONFIG)
+                self.assertEqual(expected_placed, len(result.placed))
+
+    def test_what_happens_if_you_add_more_than_two_jokers(self):
+        result = find_best_move_strings(["a1 J J J"], "b1 y4 y5", JOKER_LOCK_CONFIG)
+        expected = RummiResult.from_strings(["J J a1 b1", "y4 y5 J"], "b1 y4 y5", "")
+        self.assert_result_equal(expected, result)
+
+        result = find_best_move_strings(["J a2 J J a5 a6 J"], "a4 y4 y5", JOKER_LOCK_CONFIG)
+        expected = RummiResult.from_strings(["J a2 J a4 a5 a6 J", "y4 y5 J"], "a4 y4 y5", "")
+        self.assert_result_equal(expected, result)
+
+        result = find_best_move_strings(["J J J J J J a7 J J J J J J"], "a6 y4 y5", JOKER_LOCK_CONFIG)
+        expected = RummiResult.from_strings(["J J J J J a6 a7 J J J J J J", "y4 y5 J"], "a6 y4 y5", "")
         self.assert_result_equal(expected, result)
 
     def assert_sets_equal(self, expected_sets: list[str], actual_sets: list[tuple[Tile, ...]]):
