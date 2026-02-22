@@ -257,6 +257,30 @@ class TestRummi(unittest.TestCase):
         expected = RummiResult.from_strings(["a4 b4 J", "a4 r4 y4"], "a4 r4 y4", "")
         self.assert_result_equal(expected, result)
 
+    def test_two_jokers_on_table_in_one_set_can_add(self):
+        result = find_best_move_strings(["a1 J J a4"], "a5", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["a1 J J a4 a5"], "a5", "")
+        self.assert_result_equal(expected, result)
+
+    def test_two_jokers_in_group_on_table_replace_one(self):
+        result = find_best_move_strings(["J J a1 b1"], "r1 a2 b2", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["J a1 b1 r1", "a2 b2 J"], "r1 a2 b2", "")
+        self.assert_result_equal(expected, result)
+
+    def test_ambiguous_two_joker_set_can_be_run(self):
+        result = find_best_move_strings(["a1 J J"], "a3", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["a1 J a3"], "a3", "")
+        self.assert_result_equal(expected, result)
+
+    def test_ambiguous_two_joker_set_can_be_group(self):
+        result = find_best_move_strings(["a1 J J"], "b1 y4 y5", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["J a1 b1", "J y4 y5"], "b1 y4 y5", "")
+        self.assert_result_equal(expected, result)
+
     def assert_sets_equal(self, expected_sets: list[str], actual_sets: list[tuple[Tile, ...]]):
         self.assertCountEqual([tuple(Tile.from_str(s)) for s in expected_sets], actual_sets)
 

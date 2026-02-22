@@ -59,22 +59,19 @@ class Config:
 
 @dataclass
 class JokerParams:
-    set_to_index_map: dict[tuple[Tile, ...], int]
+    set_tile_matrices_by_k_set: dict[tuple, ndarray]
     """
-    Mapping from tuple tile sets to their "set index" in the other data structures
-    """
-
-    set_tile_matrix: ndarray
-    """
-    2d array where each column corresponds to a set, and each value in the column is the count of the corresponding tile in that set 
+    2d arrays where each column corresponds to a set, and each value in the column is the count of the corresponding tile in that set 
     """
 
-    substitution_tile_array: ndarray
+    substitution_tile_arrays: list[ndarray]
     """
-    1d array where each element is 1 if that tile can substitute the joker, 0 otherwise
+    1d arrays where each element is 1 if that tile can substitute the joker, 0 otherwise
     """
 
-    sets: list[tuple[Tile, ...]]
+    tilesets_by_k_set: dict[tuple, list[tuple[Tile, ...]]]
+
+    joker_count: int
 
 
 @dataclass
