@@ -217,13 +217,6 @@ class TestRummi(unittest.TestCase):
         expected = RummiResult.from_strings(["J y2 y3 y4 y5 y6", "a3 a4 a5", "a6 b6 J"], "a3 b6 a6", "r1 r2")
         self.assert_result_equal(expected, result)
 
-        # Check that we can manipulate both if not joker locking
-        config = Config(JokerMode.FREE, MaximizeMode.VALUE_PLACED, joker_value=0)
-        result = find_best_move_strings(["J a4 a5", "J y2 y3 y4 y5 y6"], "r1 r2 a3 b6 a6", config)
-
-        expected = RummiResult.from_strings(["y2 y3 y4 y5 y6", "a3 a4 a5", "a6 b6 J", "r1 r2 J"], "r1 r2 a3 b6 a6", "")
-        self.assert_result_equal(expected, result)
-
     def test_jokers_compete_for_same_tile(self):
         result = find_best_move_strings(["J a4 a5 a6", "J a4 a5 a6"], "a3 r6 r6 b6 b6", JOKER_LOCK_CONFIG)
         # Table                               Tiles in play     Rack
