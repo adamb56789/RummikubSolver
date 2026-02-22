@@ -1,6 +1,7 @@
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Optional, Iterable
 
 from numpy import ndarray
 
@@ -33,6 +34,114 @@ class Tile:
             Tile(tile[0], int(tile[1:]) if len(tile) > 1 else 0)
             for tile in s.split(" ")
         ]
+
+
+class Tileset:
+    is_run: bool
+    is_group: bool
+    run_colour: str
+    group_value: int
+    group_colours: list[str]
+    number_of_jokers: int
+    contains_joker: bool
+
+    tiles: tuple[Tile, ...]
+
+    def __init__(self, tiles: Iterable[Tile]):
+        tiles = list(tiles)
+
+        colour_count = Counter(t.colour for t in tiles)
+        number_of_jokers = colour_count.get("J", 0)
+
+        is_ambiguous = False
+        if len(tiles) - number_of_jokers < 2:
+            is_ambiguous = True
+            self.is_group = True
+
+            # Can only be a run if there is space for it, e.g. (J a1 J) cannot.
+            first_normal_tile_index, first_normal_tile_value = next(
+                (i, t.value) for i, t in enumerate(tiles) if not t.is_joker()
+            )
+            first_tile_value = first_normal_tile_value - first_normal_tile_index
+            self.is_run = 1 <= first_tile_value and (first_tile_value + len(tiles)) <= 13
+        elif len(colour_count) <= 2:
+            self.is_run = True
+            self.is_group = False
+        else:
+            self.is_run = False
+            self.is_group = True
+
+        set_colours = list(colour_count.keys())
+        if "J" in set_colours:
+            set_colours.remove("J")
+        if self.is_run:
+            self.run_colour = set_colours[0]
+
+        if self.is_group:
+            self.group_value = next(t for t in tiles if not t.is_joker()).value
+            self.group_colours = set_colours
+
+        if self.is_group and not is_ambiguous:
+            self.tiles = tuple(sorted(tiles))
+        else:
+            self.tiles = tuple(tiles)
+
+        self.number_of_jokers = number_of_jokers
+        self.contains_joker = number_of_jokers > 0
+
+    def __len__(self):
+        return len(self.tiles)
+
+    def __lt__(self, other):
+        return self.tiles < other.tiles
+
+    def __eq__(self, other):
+        return self.tiles == other.tiles
+
+    def __hash__(self):
+        return hash(self.tiles)
+
+    def __iter__(self):
+        return iter(self.tiles)
+
+    def __getitem__(self, item):
+        return self.tiles[item]
+
+    def __repr__(self):
+        return "(" + " ".join(str(t) for t in self.tiles) + ")"
+
+    def split_tileset(self) -> list['Tileset']:
+        n = len(self)
+        assert n >= 6
+
+        result = []
+        i = 0
+
+        while n > 0:
+            if n == 6:
+                sizes = (3, 3)
+            elif n == 7:
+                sizes = (3, 4)
+            elif n == 8:
+                sizes = (4, 4)
+            elif n == 9:
+                sizes = (4, 5)
+            else:
+                sizes = (5,)
+
+            for s in sizes:
+                result.append(Tileset(self.tiles[i:i + s]))
+                i += s
+                n -= s
+
+        return result
+
+    @staticmethod
+    def from_str(s: str) -> 'Tileset':
+        return Tileset([
+            Tile(tile[0], int(tile[1:]) if len(tile) > 1 else 0)
+            for tile in s.split(" ")
+        ])
 
 
 class MaximizeMode(Enum):
@@ -69,21 +178,21 @@ class JokerParams:
     1d arrays where each element is 1 if that tile can substitute the joker, 0 otherwise
     """
 
-    tilesets_by_k_set: dict[tuple, list[tuple[Tile, ...]]]
+    tilesets_by_k_set: dict[tuple, list[Tileset]]
 
     joker_count: int
 
 
 @dataclass
 class RummiResult:
-    table: list[tuple[Tile, ...]]
+    table: list[Tileset]
     placed: list[Tile]
     remaining: list[Tile]
 
     @staticmethod
     def from_strings(table: list[str], placed: str, remaining: str) -> 'RummiResult':
         return RummiResult(
-            [tuple(Tile.from_str(s)) for s in table],
+            [Tileset.from_str(s) for s in table],
             Tile.from_str(placed),
             Tile.from_str(remaining),
         )

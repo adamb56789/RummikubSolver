@@ -1,4 +1,4 @@
-from collections import Counter, defaultdict
+from collections import defaultdict
 from itertools import combinations, chain
 
 import numpy as np
@@ -7,18 +7,18 @@ from ortools.sat.python import cp_model
 from ortools.sat.python.cp_model import IntVar
 from pandas import Series
 
-from structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, COLOURS, JokerParams
+from structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, COLOURS, JokerParams, Tileset
 
 
 def create_runs():
-    runs: list[tuple[Tile, ...]] = []
+    runs: list[Tileset] = []
     for c in COLOURS:
         for run_length in [3, 4, 5]:
 
             # No Jokers
 
             for i in range(1, 15 - run_length):
-                runs.append(tuple(Tile(c, j) for j in range(i, i + run_length)))
+                runs.append(Tileset(Tile(c, j) for j in range(i, i + run_length)))
 
             # One joker
 
@@ -26,13 +26,13 @@ def create_runs():
             # For example b2 b3 J is equivalent to J b2 b3
             for i in range(1, 15 - run_length):
                 for joker_pos in range(i + 1, i + run_length):
-                    runs.append(tuple(
+                    runs.append(Tileset(
                         JOKER if j == joker_pos else Tile(c, j)
                         for j in range(i, i + run_length)
                     ))
 
             # Special case to put the joker in the 1st position for the 11, 12, 13 run
-            runs.append(tuple(
+            runs.append(Tileset(
                 JOKER if j == 14 - run_length else Tile(c, j)
                 for j in range(14 - run_length, 14)
             ))
@@ -42,14 +42,14 @@ def create_runs():
             for i in range(1, 15 - run_length):
                 for joker_pos_1 in range(i + 1, i + run_length - 1):
                     for joker_pos_2 in range(joker_pos_1 + 1, i + run_length):
-                        runs.append(tuple(
+                        runs.append(Tileset(
                             JOKER if j == joker_pos_1 or j == joker_pos_2 else Tile(c, j)
                             for j in range(i, i + run_length)
                         ))
 
             joker_pos_1 = 14 - run_length
             for joker_pos_2 in range(joker_pos_1 + 1, 14):
-                runs.append(tuple(
+                runs.append(Tileset(
                     JOKER if j == joker_pos_1 or j == joker_pos_2 else Tile(c, j) for
                     j in range(14 - run_length, 14)
                 ))
@@ -57,25 +57,25 @@ def create_runs():
 
 
 def create_groups():
-    groups: list[tuple[Tile, ...]] = []
+    groups: list[Tileset] = []
 
     for v in range(1, 14):
         for cs in combinations(COLOURS, 3):
-            groups.append(tuple(Tile(c, v) for c in sorted(cs)))
+            groups.append(Tileset(Tile(c, v) for c in sorted(cs)))
 
         for cs in combinations(COLOURS, 2):
-            groups.append(tuple(Tile(c, v) for c in sorted(cs)) + tuple([JOKER]))
+            groups.append(Tileset([Tile(c, v) for c in sorted(cs)] + [JOKER]))
 
         # Groups of 3 tiles with 2 jokers already covered by runs
 
         for cs in combinations(COLOURS, 4):
-            groups.append(tuple(Tile(c, v) for c in sorted(cs)))
+            groups.append(Tileset(Tile(c, v) for c in sorted(cs)))
 
         for cs in combinations(COLOURS, 3):
-            groups.append(tuple(Tile(c, v) for c in sorted(cs)) + tuple([JOKER]))
+            groups.append(Tileset([Tile(c, v) for c in sorted(cs)] + [JOKER]))
 
         for cs in combinations(COLOURS, 2):
-            groups.append(tuple(Tile(c, v) for c in sorted(cs)) + tuple([JOKER] * 2))
+            groups.append(Tileset([Tile(c, v) for c in sorted(cs)] + [JOKER] * 2))
 
     return groups
 
@@ -88,7 +88,7 @@ RUNS = create_runs()
 GROUPS = create_groups()
 SETS = RUNS + GROUPS
 
-SET_TO_INDEX_MAP = {s: i for i, s in enumerate(SETS)}
+SET_TO_INDEX_MAP: dict[Tileset, int] = {s: i for i, s in enumerate(SETS)}
 SET_TILE_MATRIX = np.zeros((len(TILES), len(SETS)), int)
 
 for tiles, j in SET_TO_INDEX_MAP.items():
@@ -97,7 +97,7 @@ for tiles, j in SET_TO_INDEX_MAP.items():
 
 
 def find_best_move(
-        table_sets: list[tuple[Tile, ...]],
+        table_sets: list[Tileset],
         rack_tiles: list[Tile],
         config: Config
 ) -> RummiResult:
@@ -112,13 +112,10 @@ def find_best_move(
     # Incoming sets can be too long, in which case we just split them up,
     # unless it has jokers which need to be locked but that is handled separately.
     # This kinda breaks the manipulation minimization term but that's just a bonus.
-    sets_to_process = []
+    sets_to_process: list[Tileset] = []
     for ts in table_sets:
-        if len(ts) > 5 and (config.joker_mode == JokerMode.FREE or JOKER not in ts):
-            sets_to_process.extend(split_tuple(ts))
-        elif len(Counter([t.colour for t in ts])) > 2:
-            # A group, should be in sorted order
-            sets_to_process.append(tuple(sorted(ts)))
+        if len(ts) > 5 and (config.joker_mode == JokerMode.FREE or not ts.contains_joker):
+            sets_to_process.extend(ts.split_tileset())
         else:
             sets_to_process.append(ts)
 
@@ -128,17 +125,17 @@ def find_best_move(
         joker_params = JokerParams({}, [], {}, 0)
 
     for ts in sets_to_process:
-        if not (config.joker_mode == JokerMode.LOCKING and JOKER in ts):
+        if not (config.joker_mode == JokerMode.LOCKING and ts.contains_joker):
             # Incoming sets might have jokers at the start like "J a2 a3" which is not in our/the paper's sets, since they
             # are made redundant by "a2 a3 J". In such cases we automatically rearrange them to our preferred format, since that is allowed.
             if ts not in SET_TO_INDEX_MAP:
                 if ts[0].colour != "J":
                     raise RuntimeError("Invalid set")
-                ts = ts[1:] + tuple([ts[0]])
+                ts = Tileset(ts[1:] + tuple([ts[0]]))
 
                 # Could be 2 jokers at the front so do it again
                 if ts[0].colour == "J":
-                    ts = ts[1:] + tuple([ts[0]])
+                    ts = Tileset(ts[1:] + tuple([ts[0]]))
 
             table_sets_array[SET_TO_INDEX_MAP[ts]] += 1
 
@@ -180,84 +177,68 @@ def find_best_move(
     return result
 
 
-def prepare_joker_params(tile_sets: list[tuple[Tile, ...]]) -> JokerParams:
-    tilesets_by_k_set: dict[tuple, list[tuple[Tile, ...]]] = defaultdict(list)
+def prepare_joker_params(tilesets: list[Tileset]) -> JokerParams:
+    tilesets_by_k_set: dict[tuple, list[Tileset]] = defaultdict(list)
     replacement_tiles_by_k: dict[int, list[Tile]] = defaultdict(list)
 
     seen_joker_count = 0
-    for tile_set in tile_sets:
-        # If there is only one colour it is a run
-        colour_count = Counter([t.colour for t in tile_set])
-
-        number_of_jokers = colour_count["J"]
-
-        if number_of_jokers == 0:
+    for tileset in tilesets:
+        if tileset.number_of_jokers == 0:
             continue
 
-        if len(colour_count) == 2:
-            group_colours = list(colour_count.keys())
-            group_colours.remove("J")
-            run_colour = group_colours.pop()
-
+        if tileset.is_run:
             first_normal_tile_index, first_normal_tile_value = next(
-                (i, t.value) for i, t in enumerate(tile_set) if t != JOKER
+                (i, t.value) for i, t in enumerate(tileset) if not t.is_joker()
             )
             first_tile_value = first_normal_tile_value - first_normal_tile_index
 
-            joker_indexes = [i for i, t in enumerate(tile_set) if t == JOKER]
+            joker_indexes = [i for i, t in enumerate(tileset) if t.is_joker()]
             joker_values = [first_tile_value + i for i in joker_indexes]
 
             for i, joker_value in enumerate(joker_values):
-                replacement_tiles_by_k[seen_joker_count + i].append(Tile(run_colour, joker_value))
+                replacement_tiles_by_k[seen_joker_count + i].append(Tile(tileset.run_colour, joker_value))
 
-            for K in non_empty_powerset(range(seen_joker_count, seen_joker_count + number_of_jokers)):
-                tilesets_with_jokers: list[tuple[Tile, ...]] = []
+            for K in non_empty_powerset(range(seen_joker_count, seen_joker_count + tileset.number_of_jokers)):
+                tilesets_with_jokers: list[Tileset] = []
 
                 for start in range(1, 1 + first_tile_value):
-                    for end in range(first_tile_value + len(tile_set), 15):
+                    for end in range(first_tile_value + len(tileset), 15):
                         run_tiles = []
                         for val in range(start, end):
-                            if val in {joker_values[k - number_of_jokers] for k in K}:
+                            if val in {joker_values[k - tileset.number_of_jokers] for k in K}:
                                 run_tiles.append(JOKER)
                             else:
-                                run_tiles.append(Tile(run_colour, val))
-                        tilesets_with_jokers.append(tuple(run_tiles))
+                                run_tiles.append(Tile(tileset.run_colour, val))
+                        tilesets_with_jokers.append(Tileset(run_tiles))
 
                 tilesets_by_k_set[K].extend(tilesets_with_jokers)
 
-        # It is a group. The second condition covers the case where there is only 1 non-joker, like (a1, J, J)
-        if len(colour_count) > 2 or len(tile_set) - number_of_jokers < 2:
+        if tileset.is_group:
             # Since jokers in groups can be substituted for either colour there is repetition here:
             # - The substitution tiles for each joker are all the same.
             # - Replacing the first joker and replacing the second etc is also arbitrary, so the tilesets are the same for all K of the same size.
             # This is fine and how the model is set up, possibly inefficient but since groups are only length 3-4 and only 2 jokers, not a big deal.
-            group_value = next(t for t in tile_set if t != JOKER).value
-
-            group_colours = list(colour_count.keys())
-            group_colours.remove("J")
-
-            missing_colours = [c for c in COLOURS if c not in group_colours]
-            for i in range(number_of_jokers):
+            missing_colours = [c for c in COLOURS if c not in tileset.group_colours]
+            for i in range(tileset.number_of_jokers):
                 for c in missing_colours:
-                    replacement_tiles_by_k[seen_joker_count + i].append(Tile(c, group_value))
+                    replacement_tiles_by_k[seen_joker_count + i].append(Tile(c, tileset.group_value))
 
-            for K in non_empty_powerset(range(seen_joker_count, seen_joker_count + number_of_jokers)):
-                tilesets_with_jokers = []
-                for replaced_tile_colours in combinations(missing_colours, number_of_jokers - len(K)):
-                    for added_tile_count in range(5 - len(tile_set)):
+            for K in non_empty_powerset(range(seen_joker_count, seen_joker_count + tileset.number_of_jokers)):
+                tilesets_with_jokers: list[Tileset] = []
+                for replaced_tile_colours in combinations(missing_colours, tileset.number_of_jokers - len(K)):
+                    for added_tile_count in range(5 - len(tileset)):
                         for added_tile_colours in combinations(set(missing_colours) - set(replaced_tile_colours),
                                                                added_tile_count):
-                            existing_tiles = [Tile(c, group_value) for c in group_colours]
+                            existing_tiles = [Tile(c, tileset.group_value) for c in tileset.group_colours]
                             jokers = [JOKER] * len(K)
-                            replaced_tiles = [Tile(c, group_value) for c in replaced_tile_colours]
-                            added_tiles = [Tile(c, group_value) for c in added_tile_colours]
-                            possible_set = tuple(sorted(existing_tiles + jokers + replaced_tiles + added_tiles))
+                            replaced_tiles = [Tile(c, tileset.group_value) for c in replaced_tile_colours]
+                            added_tiles = [Tile(c, tileset.group_value) for c in added_tile_colours]
 
-                            tilesets_with_jokers.append(possible_set)
+                            tilesets_with_jokers.append(Tileset(existing_tiles + jokers + replaced_tiles + added_tiles))
 
                 tilesets_by_k_set[K].extend(tilesets_with_jokers)
 
-        seen_joker_count += number_of_jokers
+        seen_joker_count += tileset.number_of_jokers
 
     substitution_tile_arrays_by_k = []
     for i in range(seen_joker_count):
@@ -376,7 +357,7 @@ def solve_cp_model(
 
 def find_best_move_strings(table_set_strings: list[str], rack_string: str, config: Config) -> RummiResult:
     return find_best_move(
-        [tuple(Tile.from_str(s)) for s in table_set_strings],
+        [Tileset.from_str(s) for s in table_set_strings],
         Tile.from_str(rack_string),
         config
     )
@@ -385,34 +366,6 @@ def find_best_move_strings(table_set_strings: list[str], rack_string: str, confi
 def nonzero_pairs(arr):
     idx = np.where(arr > 0)[0]
     return np.column_stack((idx, arr[idx]))
-
-
-def split_tuple(t):
-    n = len(t)
-    if n < 6:
-        raise ValueError("Tuple must have length at least 6")
-
-    result = []
-    i = 0
-
-    while n > 0:
-        if n == 6:
-            sizes = (3, 3)
-        elif n == 7:
-            sizes = (3, 4)
-        elif n == 8:
-            sizes = (4, 4)
-        elif n == 9:
-            sizes = (4, 5)
-        else:
-            sizes = (5,)
-
-        for s in sizes:
-            result.append(t[i:i + s])
-            i += s
-            n -= s
-
-    return result
 
 
 def non_empty_powerset(super_set):

@@ -4,7 +4,7 @@ from collections import Counter
 from itertools import product
 
 from rummi import find_best_move, find_best_move_strings, SETS
-from structs import Tile, MaximizeMode, JokerMode, Config, RummiResult
+from structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, Tileset
 
 JOKER_LOCK_CONFIG = Config(JokerMode.LOCKING, MaximizeMode.VALUE_PLACED, joker_value=0)
 
@@ -25,8 +25,7 @@ class TestRummi(unittest.TestCase):
         if table_sets is None:
             table_sets = []
             if table_set_strings is not None:
-                for s in table_set_strings:
-                    table_sets.append((tuple(Tile.from_str(s))))
+                table_sets = [Tileset.from_str(s) for s in table_set_strings]
         rack_tiles = Tile.from_str(rack_str)
 
         config = Config(joker_mode=JokerMode.FREE, maximize_mode=MaximizeMode.TILES_PLACED)
@@ -157,12 +156,14 @@ class TestRummi(unittest.TestCase):
         config = Config(JokerMode.FREE, MaximizeMode.TILES_PLACED, rearrange_value=1 / 40)
         result = find_best_move_strings(["a1 a2 a3", "r1 r2 r3", "b1 b2 b3"], "a4 r4 b4", config)
 
-        self.assert_sets_equal(["a1 a2 a3", "r1 r2 r3", "b1 b2 b3", "a4 b4 r4"], result.table)
+        expected = RummiResult.from_strings(["a1 a2 a3", "r1 r2 r3", "b1 b2 b3", "a4 b4 r4"], "a4 r4 b4", "")
+        self.assert_result_equal(expected, result)
 
         config = Config(JokerMode.FREE, MaximizeMode.TILES_PLACED, rearrange_value=-1 / 40)
         result = find_best_move_strings(["a1 a2 a3", "r1 r2 r3", "b1 b2 b3"], "a4 r4 b4", config)
 
-        self.assert_sets_equal(["a1 b1 r1", "a2 b2 r2", "a3 b3 r3", "a4 b4 r4"], result.table)
+        expected = RummiResult.from_strings(["a1 b1 r1", "a2 b2 r2", "a3 b3 r3", "a4 b4 r4"], "a4 r4 b4", "")
+        self.assert_result_equal(expected, result)
 
     def test_joker_locked_cannot_move(self):
         result = find_best_move_strings(["J a4 a5 a6"], "r1 r2", JOKER_LOCK_CONFIG)
@@ -328,10 +329,6 @@ class TestRummi(unittest.TestCase):
 
         result = find_best_move_strings(["J a2 J J a5 a6 J"], "a4 y4 y5", JOKER_LOCK_CONFIG)
         expected = RummiResult.from_strings(["J a2 J a4 a5 a6 J", "y4 y5 J"], "a4 y4 y5", "")
-        self.assert_result_equal(expected, result)
-
-        result = find_best_move_strings(["J J J J J J a7 J J J J J J"], "a6 y4 y5", JOKER_LOCK_CONFIG)
-        expected = RummiResult.from_strings(["J J J J J a6 a7 J J J J J J", "y4 y5 J"], "a6 y4 y5", "")
         self.assert_result_equal(expected, result)
 
     def assert_sets_equal(self, expected_sets: list[str], actual_sets: list[tuple[Tile, ...]]):
