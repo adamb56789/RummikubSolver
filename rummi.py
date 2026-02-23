@@ -179,12 +179,15 @@ def find_best_move(
 
 def prepare_joker_params(tilesets: list[Tileset]) -> JokerParams:
     tilesets_by_k_set: dict[tuple, list[Tileset]] = defaultdict(list)
-    replacement_tiles_by_k: dict[int, list[Tile]] = defaultdict(list)
+    substitution_tiles_by_k: list[list[int]] = []
 
     seen_joker_count = 0
     for tileset in tilesets:
         if tileset.number_of_jokers == 0:
             continue
+
+        for i in range(tileset.number_of_jokers):
+            substitution_tiles_by_k.append([])
 
         if tileset.is_run:
             first_normal_tile_index, first_normal_tile_value = next(
@@ -196,7 +199,7 @@ def prepare_joker_params(tilesets: list[Tileset]) -> JokerParams:
             joker_values = [first_tile_value + i for i in joker_indexes]
 
             for i, joker_value in enumerate(joker_values):
-                replacement_tiles_by_k[seen_joker_count + i].append(Tile(tileset.run_colour, joker_value))
+                substitution_tiles_by_k[seen_joker_count + i].append(Tile(tileset.run_colour, joker_value).index())
 
             for K in non_empty_powerset(range(seen_joker_count, seen_joker_count + tileset.number_of_jokers)):
                 tilesets_with_jokers: list[Tileset] = []
@@ -221,7 +224,7 @@ def prepare_joker_params(tilesets: list[Tileset]) -> JokerParams:
             missing_colours = [c for c in COLOURS if c not in tileset.group_colours]
             for i in range(tileset.number_of_jokers):
                 for c in missing_colours:
-                    replacement_tiles_by_k[seen_joker_count + i].append(Tile(c, tileset.group_value))
+                    substitution_tiles_by_k[seen_joker_count + i].append(Tile(c, tileset.group_value).index())
 
             for K in non_empty_powerset(range(seen_joker_count, seen_joker_count + tileset.number_of_jokers)):
                 tilesets_with_jokers: list[Tileset] = []
@@ -240,12 +243,6 @@ def prepare_joker_params(tilesets: list[Tileset]) -> JokerParams:
 
         seen_joker_count += tileset.number_of_jokers
 
-    substitution_tile_arrays_by_k = []
-    for i in range(seen_joker_count):
-        substitution_tile_array = np.zeros((len(TILES)), int)
-        substitution_tile_array[[t.index() for t in replacement_tiles_by_k[i]]] = 1
-        substitution_tile_arrays_by_k.append(substitution_tile_array)
-
     set_tile_matrices = {}
     for K in tilesets_by_k_set.keys():
         set_tile_matrix = np.zeros((len(TILES), len(tilesets_by_k_set[K])), int)
@@ -255,7 +252,7 @@ def prepare_joker_params(tilesets: list[Tileset]) -> JokerParams:
 
         set_tile_matrices[K] = set_tile_matrix
 
-    return JokerParams(set_tile_matrices, substitution_tile_arrays_by_k, tilesets_by_k_set, seen_joker_count)
+    return JokerParams(set_tile_matrices, substitution_tiles_by_k, tilesets_by_k_set, seen_joker_count)
 
 
 def solve_cp_model(
@@ -278,8 +275,8 @@ def solve_cp_model(
 
     # true iff joker_k uses tile_i as its substitution
     subbed_tile: dict[tuple[int, int], IntVar] = {}
-    for k, substitution_tile_array in enumerate(joker_params.substitution_tile_arrays):
-        for i in np.nonzero(substitution_tile_array)[0]:
+    for k, substitution_tiles in enumerate(joker_params.substitution_tiles_by_k):
+        for i in substitution_tiles:
             subbed_tile[k, int(i)] = model.new_bool_var(f"joker_{k}_takes_tile_{i}")
 
     for i in range(len(TILES)):
@@ -311,8 +308,7 @@ def solve_cp_model(
     for k in range(joker_params.joker_count):
         joker_sets_used = sum(
             sum(joker_placed_sets_vars[k_set]) for k_set in joker_params.tilesets_by_k_set.keys() if k in k_set)
-        sub_tile_indexes = np.nonzero(joker_params.substitution_tile_arrays[k])[0]
-        tiles_subbing_for_joker = sum(subbed_tile[k, int(i)] for i in sub_tile_indexes)
+        tiles_subbing_for_joker = sum(subbed_tile[k, int(i)] for i in joker_params.substitution_tiles_by_k[k])
 
         # Either use exactly one joker-set OR substitute with exactly one tile
         model.add(joker_sets_used + tiles_subbing_for_joker == 1)

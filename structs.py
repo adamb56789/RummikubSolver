@@ -173,13 +173,12 @@ class JokerParams:
     2d arrays where each column corresponds to a set, and each value in the column is the count of the corresponding tile in that set 
     """
 
-    substitution_tile_arrays: list[ndarray]
+    substitution_tiles_by_k: list[list[int]]
     """
-    1d arrays where each element is 1 if that tile can substitute the joker, 0 otherwise
+    List of tile indexes that can substitute for joker k
     """
 
     tilesets_by_k_set: dict[tuple, list[Tileset]]
-
     joker_count: int
 
 
