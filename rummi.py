@@ -237,7 +237,13 @@ def prepare_joker_params(tilesets: list[Tileset]) -> JokerParams:
                             replaced_tiles = [Tile(c, tileset.group_value) for c in replaced_tile_colours]
                             added_tiles = [Tile(c, tileset.group_value) for c in added_tile_colours]
 
-                            tilesets_with_jokers.append(Tileset(existing_tiles + jokers + replaced_tiles + added_tiles))
+                            # Handle the special case where the order of an unambiguous "2-1" tileset such as (J a1 J) matters.
+                            if len(existing_tiles + replaced_tiles + added_tiles) == 1:
+                                new_tileset = tileset
+                            else:
+                                new_tileset = Tileset(existing_tiles + jokers + replaced_tiles + added_tiles)
+
+                            tilesets_with_jokers.append(new_tileset)
 
                 tilesets_by_k_set[K].extend(tilesets_with_jokers)
 

@@ -280,6 +280,12 @@ class TestRummi(unittest.TestCase):
         expected = RummiResult.from_strings(["J a1 b1", "y4 y5 J"], "b1 y4 y5", "")
         self.assert_result_equal(expected, result)
 
+    def test_two_jokers_not_ambiguous_when_run_impossible(self):
+        result = find_best_move_strings(["J a1 J"], "a2 y4 y5", JOKER_LOCK_CONFIG)
+
+        expected = RummiResult.from_strings(["J a1 J"], "", "a2 y4 y5")
+        self.assert_result_equal(expected, result)
+
     def test_random_two_sets_on_table_with_one_joker_each_locking(self):
         random.seed(0)
         expected_placed_list = [10, 9, 6, 7, 7, 7, 10, 9, 10, 4]
