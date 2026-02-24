@@ -7,15 +7,13 @@ from ortools.sat.python import cp_model
 from ortools.sat.python.cp_model import IntVar
 from pandas import Series
 
-from rummi_cube.tileset_generation import create_runs, create_groups, JOKER
 from rummi_cube.structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, COLOURS, TilesetModelParams, Tileset
+from rummi_cube.tileset_generation import JOKER, generate_all_sets
 
 TILES = [Tile(c, v) for c in COLOURS for v in range(1, 14)] + [JOKER]
 TILE_VALUES = np.array([t.value for t in TILES])
 
-RUNS = create_runs()
-GROUPS = create_groups()
-SETS = RUNS + GROUPS
+SETS = generate_all_sets()
 
 SET_TO_INDEX_MAP: dict[Tileset, int] = {s: i for i, s in enumerate(SETS)}
 SET_TILE_MATRIX = np.zeros((len(TILES), len(SETS)), int)
@@ -59,18 +57,6 @@ def find_best_move(
 
     for ts in sets_to_process:
         if not (config.joker_mode == JokerMode.LOCKING and ts.contains_joker):
-            # TODO but what if we actually want to play these?
-            # Incoming sets might have jokers at the start like "J a2 a3" which is not in our/the paper's sets, since they
-            # are made redundant by "a2 a3 J". In such cases we automatically rearrange them to our preferred format, since that is allowed.
-            # if ts not in SET_TO_INDEX_MAP:
-            #     if ts[0].colour != "J":
-            #         raise RuntimeError("Invalid set")
-            #     ts = Tileset(ts[1:] + tuple([ts[0]]))
-            #
-            #     # Could be 2 jokers at the front so do it again
-            #     if ts[0].colour == "J":
-            #         ts = Tileset(ts[1:] + tuple([ts[0]]))
-
             table_sets_array[SET_TO_INDEX_MAP[ts]] += 1
 
         for tile in ts:

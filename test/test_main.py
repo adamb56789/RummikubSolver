@@ -3,10 +3,10 @@ import unittest
 from collections import Counter
 from itertools import product
 
-from src.rummi_cube.rummi import find_best_move, find_best_move_strings, SETS
 from rummi_cube.structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, Tileset
+from src.rummi_cube.rummi import find_best_move, find_best_move_strings, SETS
 
-JOKER_LOCK_CONFIG = Config(JokerMode.LOCKING, MaximizeMode.VALUE_PLACED, joker_value=0)
+JOKER_LOCK_CONFIG = Config(JokerMode.LOCKING, MaximizeMode.TILES_PLACED)
 
 ALL_TILES_STRINGS = [c + str(val) for c, val in product("brya", range(1, 14))] * 2
 ALL_TILES_STRINGS_WITH_JOKERS = ALL_TILES_STRINGS + ["J"] * 2
@@ -215,7 +215,7 @@ class TestRummi(unittest.TestCase):
     def test_two_jokers_can_only_replace_one(self):
         result = find_best_move_strings(["J a4 a5", "J y2 y3 y4 y5 y6"], "r1 r2 a3 b6 a6", JOKER_LOCK_CONFIG)
 
-        expected = RummiResult.from_strings(["J y2 y3 y4 y5 y6", "a3 a4 a5", "a6 b6 J"], "a3 b6 a6", "r1 r2")
+        expected = RummiResult.from_strings(["J y2 y3 y4 y5 y6", "a3 a4 a5 a6", "r1 r2 J"], "r1 r2 a3 a6", "b6")
         self.assert_result_equal(expected, result)
 
     def test_jokers_compete_for_same_tile(self):
@@ -234,7 +234,7 @@ class TestRummi(unittest.TestCase):
         # check that this is prevented and it can only sub for one of them
         result = find_best_move_strings(["a4 a5 a6 J", "J a8 a9 a10"], "a7 b4 r4 b10", JOKER_LOCK_CONFIG)
 
-        expected = RummiResult.from_strings(["a4 a5 a6 J", "a7 a8 a9", "a10 b10 J", ], "a7 b10", "b4 r4")
+        expected = RummiResult.from_strings(["J a8 a9 a10", "J0 b4 r4", "a4 a5 a6 a7"], "a7 b4 r4", "b10")
         self.assert_result_equal(expected, result)
 
     def test_either_colour_can_replace_joker_in_group(self):
@@ -288,7 +288,7 @@ class TestRummi(unittest.TestCase):
 
     def test_random_two_sets_on_table_with_one_joker_each_locking(self):
         random.seed(0)
-        expected_placed_list = [8, 8, 6, 7, 1, 8, 10, 9, 6, 5]
+        expected_placed_list = [6, 6, 6, 4, 9, 6, 9, 9, 5, 4]
         for expected_placed in expected_placed_list:
             sets_with_no_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 0]
             sets_with_one_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 1]
@@ -302,7 +302,7 @@ class TestRummi(unittest.TestCase):
 
     def test_random_one_set_on_table_with_both_jokers_locking(self):
         random.seed(0)
-        expected_placed_list = [6, 7, 8, 9, 5, 7, 7, 2, 6, 3]
+        expected_placed_list = [5, 7, 3, 10, 3, 8, 6, 4, 6, 8]
         for expected_placed in expected_placed_list:
             sets_with_no_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 0]
             sets_with_two_jokers = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 2]
@@ -316,7 +316,7 @@ class TestRummi(unittest.TestCase):
 
     def test_random_one_set_on_table_with_one_joker_and_joker_on_rack_locking(self):
         random.seed(0)
-        expected_placed_list = [8, 10, 9, 11, 10, 9, 6, 4, 9, 8]
+        expected_placed_list = [7, 8, 6, 11, 6, 10, 9, 6, 8, 8]
         for expected_placed in expected_placed_list:
             sets_with_no_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 0]
             sets_with_one_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 1]

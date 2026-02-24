@@ -2,57 +2,39 @@ from itertools import combinations
 
 from rummi_cube.structs import Tileset, COLOURS, Tile
 
+JOKER = Tile("J", 0)
 
-def create_runs():
+
+def generate_all_runs():
     runs: list[Tileset] = []
     for c in COLOURS:
         for run_length in [3, 4, 5]:
-
-            # No Jokers
-            for i in range(1, 15 - run_length):
-                runs.append(Tileset(Tile(c, j) for j in range(i, i + run_length)))
-
-            # One joker
-            for i in range(1, 15 - run_length):
-                for joker_pos in range(i, i + run_length):
-                    runs.append(Tileset(
-                        JOKER if j == joker_pos else Tile(c, j)
-                        for j in range(i, i + run_length)
-                    ))
-
-            # Two jokers
-            for i in range(1, 15 - run_length):
-                for joker_pos_1 in range(i, i + run_length - 1):
-                    for joker_pos_2 in range(joker_pos_1 + 1, i + run_length):
-                        runs.append(Tileset(
-                            JOKER if j == joker_pos_1 or j == joker_pos_2 else Tile(c, j)
-                            for j in range(i, i + run_length)
-                        ))
+            for number_of_jokers in [0, 1, 2]:
+                for run_start in range(1, 15 - run_length):
+                    for joker_values in combinations(range(run_start, run_start + run_length), number_of_jokers):
+                        tiles = [
+                            JOKER if value in joker_values else Tile(c, value)
+                            for value in range(run_start, run_start + run_length)
+                        ]
+                        runs.append(Tileset(tiles))
     return runs
 
 
-def create_groups():
+def generate_all_groups():
     groups: list[Tileset] = []
 
-    for v in range(1, 14):
-        for cs in combinations(COLOURS, 3):
-            groups.append(Tileset(Tile(c, v) for c in sorted(cs)))
-
-        for cs in combinations(COLOURS, 2):
-            groups.append(Tileset([Tile(c, v) for c in sorted(cs)] + [JOKER]))
-
-        # Groups of 3 tiles with 2 jokers already covered by runs
-
-        for cs in combinations(COLOURS, 4):
-            groups.append(Tileset(Tile(c, v) for c in sorted(cs)))
-
-        for cs in combinations(COLOURS, 3):
-            groups.append(Tileset([Tile(c, v) for c in sorted(cs)] + [JOKER]))
-
-        for cs in combinations(COLOURS, 2):
-            groups.append(Tileset([Tile(c, v) for c in sorted(cs)] + [JOKER] * 2))
+    for value in range(1, 14):
+        for group_size in [3, 4]:
+            for number_of_jokers in [0, 1, 2]:
+                for colours in combinations(COLOURS, group_size - number_of_jokers):
+                    groups.append(Tileset([Tile(c, value) for c in sorted(colours)] + [JOKER] * number_of_jokers))
 
     return groups
 
 
-JOKER = Tile("J", 0)
+def generate_all_sets():
+    sets: set[Tileset] = set()
+    sets.update(generate_all_runs())
+    sets.update(generate_all_groups())
+
+    return sorted(sets)
