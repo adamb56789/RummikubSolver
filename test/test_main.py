@@ -4,7 +4,7 @@ from collections import Counter
 from itertools import product
 
 from src.rummi_cube.rummi import find_best_move, find_best_move_strings, SETS
-from structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, Tileset
+from rummi_cube.structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, Tileset
 
 JOKER_LOCK_CONFIG = Config(JokerMode.LOCKING, MaximizeMode.VALUE_PLACED, joker_value=0)
 
