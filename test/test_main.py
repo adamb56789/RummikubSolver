@@ -127,7 +127,7 @@ class TestRummi(unittest.TestCase):
     #     self.validate_sets(rack, 0, sets_on_table, expected_unmodified=19)
 
     def test_set_on_table_not_in_minimized_sets(self):
-        self.validate_sets("a4", 0, table_set_strings=["J J a2 a3"])
+        self.validate_sets("a5", 0, table_set_strings=["J J a3 a4"])
 
     def test_maximize_tiles(self):
         # Maximizing the number of tiles it should put the joker in the 5-run
@@ -288,7 +288,7 @@ class TestRummi(unittest.TestCase):
 
     def test_random_two_sets_on_table_with_one_joker_each_locking(self):
         random.seed(0)
-        expected_placed_list = [10, 9, 6, 7, 7, 7, 10, 9, 10, 4]
+        expected_placed_list = [8, 8, 6, 7, 1, 8, 10, 9, 6, 5]
         for expected_placed in expected_placed_list:
             sets_with_no_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 0]
             sets_with_one_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 1]
@@ -302,7 +302,7 @@ class TestRummi(unittest.TestCase):
 
     def test_random_one_set_on_table_with_both_jokers_locking(self):
         random.seed(0)
-        expected_placed_list = [6, 8, 8, 9, 8, 7, 3, 2, 8, 5]
+        expected_placed_list = [6, 7, 8, 9, 5, 7, 7, 2, 6, 3]
         for expected_placed in expected_placed_list:
             sets_with_no_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 0]
             sets_with_two_jokers = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 2]
@@ -316,7 +316,7 @@ class TestRummi(unittest.TestCase):
 
     def test_random_one_set_on_table_with_one_joker_and_joker_on_rack_locking(self):
         random.seed(0)
-        expected_placed_list = [9, 9, 9, 11, 8, 9, 7, 7, 8, 6]
+        expected_placed_list = [8, 10, 9, 11, 10, 9, 6, 4, 9, 8]
         for expected_placed in expected_placed_list:
             sets_with_no_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 0]
             sets_with_one_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 1]

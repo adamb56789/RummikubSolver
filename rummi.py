@@ -7,7 +7,7 @@ from ortools.sat.python import cp_model
 from ortools.sat.python.cp_model import IntVar
 from pandas import Series
 
-from structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, COLOURS, JokerParams, Tileset
+from structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, COLOURS, TilesetModelParams, Tileset
 
 
 def create_runs():
@@ -16,43 +16,25 @@ def create_runs():
         for run_length in [3, 4, 5]:
 
             # No Jokers
-
             for i in range(1, 15 - run_length):
                 runs.append(Tileset(Tile(c, j) for j in range(i, i + run_length)))
 
             # One joker
-
-            # Place jokers starting from the 2nd position, since using the first overlaps with another
-            # For example b2 b3 J is equivalent to J b2 b3
             for i in range(1, 15 - run_length):
-                for joker_pos in range(i + 1, i + run_length):
+                for joker_pos in range(i, i + run_length):
                     runs.append(Tileset(
                         JOKER if j == joker_pos else Tile(c, j)
                         for j in range(i, i + run_length)
                     ))
 
-            # Special case to put the joker in the 1st position for the 11, 12, 13 run
-            runs.append(Tileset(
-                JOKER if j == 14 - run_length else Tile(c, j)
-                for j in range(14 - run_length, 14)
-            ))
-
             # Two jokers
-
             for i in range(1, 15 - run_length):
-                for joker_pos_1 in range(i + 1, i + run_length - 1):
+                for joker_pos_1 in range(i, i + run_length - 1):
                     for joker_pos_2 in range(joker_pos_1 + 1, i + run_length):
                         runs.append(Tileset(
                             JOKER if j == joker_pos_1 or j == joker_pos_2 else Tile(c, j)
                             for j in range(i, i + run_length)
                         ))
-
-            joker_pos_1 = 14 - run_length
-            for joker_pos_2 in range(joker_pos_1 + 1, 14):
-                runs.append(Tileset(
-                    JOKER if j == joker_pos_1 or j == joker_pos_2 else Tile(c, j) for
-                    j in range(14 - run_length, 14)
-                ))
     return runs
 
 
@@ -120,47 +102,47 @@ def find_best_move(
             sets_to_process.append(ts)
 
     if config.joker_mode == JokerMode.LOCKING:
-        joker_params = prepare_joker_params(sets_to_process)
+        tileset_model_params = prepare_joker_locking_tileset_params(sets_to_process)
     else:
-        joker_params = JokerParams({}, [], {}, 0)
+        tileset_model_params = TilesetModelParams({}, [], {}, 0)
+
+    # Normal case of no jokers
+    tileset_model_params.tilesets_by_k_set[()] = SETS
+    tileset_model_params.set_tile_matrices_by_k_set[()] = SET_TILE_MATRIX
 
     for ts in sets_to_process:
         if not (config.joker_mode == JokerMode.LOCKING and ts.contains_joker):
+            # TODO but what if we actually want to play these?
             # Incoming sets might have jokers at the start like "J a2 a3" which is not in our/the paper's sets, since they
             # are made redundant by "a2 a3 J". In such cases we automatically rearrange them to our preferred format, since that is allowed.
-            if ts not in SET_TO_INDEX_MAP:
-                if ts[0].colour != "J":
-                    raise RuntimeError("Invalid set")
-                ts = Tileset(ts[1:] + tuple([ts[0]]))
-
-                # Could be 2 jokers at the front so do it again
-                if ts[0].colour == "J":
-                    ts = Tileset(ts[1:] + tuple([ts[0]]))
+            # if ts not in SET_TO_INDEX_MAP:
+            #     if ts[0].colour != "J":
+            #         raise RuntimeError("Invalid set")
+            #     ts = Tileset(ts[1:] + tuple([ts[0]]))
+            #
+            #     # Could be 2 jokers at the front so do it again
+            #     if ts[0].colour == "J":
+            #         ts = Tileset(ts[1:] + tuple([ts[0]]))
 
             table_sets_array[SET_TO_INDEX_MAP[ts]] += 1
 
         for tile in ts:
             table_tiles_array[tile.index()] += 1
 
-    result_sets_matrix, result_tiles_matrix, joker_sets_on_tables_by_k_set = solve_cp_model(
+    sets_on_tables_by_k_set, result_tiles_matrix = solve_cp_model(
         table_tiles_array,
         rack_tiles_array,
         table_sets_array,
-        joker_params,
+        tileset_model_params,
         config,
     )
 
     result_table_sets = []
-    for s in result_sets_matrix:
-        j, n = s[0], s[1]
-        for _ in range(n):
-            result_table_sets.append(SETS[j])
-
-    for k_set, joker_sets_on_table in joker_sets_on_tables_by_k_set.items():
+    for k_set, joker_sets_on_table in sets_on_tables_by_k_set.items():
         for s in joker_sets_on_table:
             j, n = s[0], s[1]
             for _ in range(n):
-                result_table_sets.append(joker_params.tilesets_by_k_set[k_set][j])
+                result_table_sets.append(tileset_model_params.tilesets_by_k_set[k_set][j])
 
     placed_tiles = []
     for t in result_tiles_matrix:
@@ -172,12 +154,10 @@ def find_best_move(
     for tile in placed_tiles:
         remaining_tiles.remove(tile)
 
-    result = RummiResult(sorted(result_table_sets), sorted(placed_tiles), sorted(remaining_tiles))
-
-    return result
+    return RummiResult(sorted(result_table_sets), sorted(placed_tiles), sorted(remaining_tiles))
 
 
-def prepare_joker_params(tilesets: list[Tileset]) -> JokerParams:
+def prepare_joker_locking_tileset_params(tilesets: list[Tileset]) -> TilesetModelParams:
     tilesets_by_k_set: dict[tuple, list[Tileset]] = defaultdict(list)
     substitution_tiles_by_k: list[list[int]] = []
 
@@ -258,32 +238,31 @@ def prepare_joker_params(tilesets: list[Tileset]) -> JokerParams:
 
         set_tile_matrices[K] = set_tile_matrix
 
-    return JokerParams(set_tile_matrices, substitution_tiles_by_k, tilesets_by_k_set, seen_joker_count)
+    return TilesetModelParams(set_tile_matrices, substitution_tiles_by_k, tilesets_by_k_set, seen_joker_count)
 
 
 def solve_cp_model(
         table_tiles_array,
         rack_tiles_array,
         table_sets_array,
-        joker_params: JokerParams,
+        tileset_params: TilesetModelParams,
         config: Config
 ):
     model = cp_model.CpModel()
 
-    placed_sets_var = model.new_int_var_series("placed_sets", pd.Index(range(len(SETS))), 0, 2)
-    placed_tiles_var = model.new_int_var_series("placed_tiles", pd.Index(range(len(TILES))), 0, 2)
-    unmodified_sets_var = model.new_int_var_series("unmodified_sets", pd.Index(range(len(SETS))), 0, 2)
+    placed_tiles_var = model.new_int_var_series("y", pd.Index(range(len(TILES))), 0, 2)
+    unmodified_sets_var = model.new_int_var_series("w", pd.Index(range(len(SETS))), 0, 2)
 
     joker_placed_sets_vars: dict[tuple[int, ...], Series] = {}
-    for k_set, sets in joker_params.tilesets_by_k_set.items():
-        name = f"joker_{'_'.join(str(k) for k in k_set)}_placed_sets"
-        joker_placed_sets_vars[k_set] = model.new_bool_var_series(name, pd.Index(range(len(sets))))
+    for k_set, sets in tileset_params.tilesets_by_k_set.items():
+        name = f"x_{'_'.join(str(k) for k in k_set)}"
+        joker_placed_sets_vars[k_set] = model.new_int_var_series(name, pd.Index(range(len(sets))), 0, 2)
 
     # true iff joker_k uses tile_i as its substitution
-    subbed_tile: dict[tuple[int, int], IntVar] = {}
-    for k, substitution_tiles in enumerate(joker_params.substitution_tiles_by_k):
+    joker_k_takes_tile_i: dict[tuple[int, int], IntVar] = {}
+    for k, substitution_tiles in enumerate(tileset_params.substitution_tiles_by_k):
         for i in substitution_tiles:
-            subbed_tile[k, int(i)] = model.new_bool_var(f"joker_{k}_takes_tile_{i}")
+            joker_k_takes_tile_i[k, int(i)] = model.new_bool_var(f"z_{k}_{i}")
 
     for i in range(len(TILES)):
         # The first constraint ensures that you can only make sets of the tiles that are on your rack or on the
@@ -291,15 +270,14 @@ def solve_cp_model(
         # plus that are placed from the rack onto the table. The left-hand side adds up the number of tile i present
         # in the sets that are finally on the table.
 
-        standard_term = sum(SET_TILE_MATRIX[i, j] * placed_sets_var[j] for j in np.nonzero(SET_TILE_MATRIX[i])[0])
-        joker_term = sum(
+        count_of_tiles_in_sets = sum(
             sum(
                 set_tile_matrix[i, l] * joker_placed_sets_vars[k_set][l]
                 for l in np.nonzero(set_tile_matrix[i])[0]
             )
-            for k_set, set_tile_matrix in joker_params.set_tile_matrices_by_k_set.items()
+            for k_set, set_tile_matrix in tileset_params.set_tile_matrices_by_k_set.items()
         )
-        model.add(standard_term + joker_term == table_tiles_array[i] + placed_tiles_var[i])
+        model.add(count_of_tiles_in_sets == table_tiles_array[i] + placed_tiles_var[i])
 
         # The second constraint states that the tiles you can place from your rack onto the table cannot be more than
         # the tiles that are on your rack.
@@ -307,14 +285,14 @@ def solve_cp_model(
 
     # Enforce that enough tiles are placed to satisfy the claims
     for i in range(len(TILES)):
-        claimers = [subbed_tile[k, i] for k in range(joker_params.joker_count) if (k, i) in subbed_tile]
+        claimers = [joker_k_takes_tile_i[k, i] for k in range(tileset_params.joker_count) if (k, i) in joker_k_takes_tile_i]
         if claimers:
             model.add(sum(claimers) <= placed_tiles_var[i])
 
-    for k in range(joker_params.joker_count):
+    for k in range(tileset_params.joker_count):
         joker_sets_used = sum(
-            sum(joker_placed_sets_vars[k_set]) for k_set in joker_params.tilesets_by_k_set.keys() if k in k_set)
-        tiles_subbing_for_joker = sum(subbed_tile[k, int(i)] for i in joker_params.substitution_tiles_by_k[k])
+            sum(joker_placed_sets_vars[k_set]) for k_set in tileset_params.tilesets_by_k_set.keys() if k in k_set)
+        tiles_subbing_for_joker = sum(joker_k_takes_tile_i[k, int(i)] for i in tileset_params.substitution_tiles_by_k[k])
 
         # Either use exactly one joker-set OR substitute with exactly one tile
         model.add(joker_sets_used + tiles_subbing_for_joker == 1)
@@ -322,7 +300,7 @@ def solve_cp_model(
     for j in range(len(SETS)):
         # Unmodified sets are maximized in the optimization step, so it chooses the highest value <= both the table
         # set and placed set, in other words unmodified_sets_var[j] = min(table_sets_array[j], placed_sets_var[j])
-        model.add_min_equality(unmodified_sets_var[j], [table_sets_array[j], placed_sets_var[j]])
+        model.add_min_equality(unmodified_sets_var[j], [table_sets_array[j], joker_placed_sets_vars[()][j]])
 
     if config.maximize_mode == MaximizeMode.VALUE_PLACED:
         TILE_VALUES[JOKER.index()] = config.joker_value
@@ -343,18 +321,15 @@ def solve_cp_model(
             raise RuntimeError("Infeasible solution")
         raise RuntimeError("Invalid state")
 
-    sets_solution = solver.values(placed_sets_var).to_numpy()
     tiles_solution = solver.values(placed_tiles_var).to_numpy()
 
-    sets_on_table = nonzero_pairs(sets_solution)
     tiles_placed = nonzero_pairs(tiles_solution)
 
-    joker_sets_on_tables_by_k_set: dict[tuple[int, ...], np.ndarray] = {}
-    for k_set in joker_params.tilesets_by_k_set.keys():
-        joker_sets_solution = solver.values(joker_placed_sets_vars[k_set]).to_numpy()
-        joker_sets_on_tables_by_k_set[k_set] = nonzero_pairs(joker_sets_solution)
+    sets_on_tables_by_k_set: dict[tuple[int, ...], np.ndarray] = {}
+    for k_set in tileset_params.tilesets_by_k_set.keys():
+        sets_on_tables_by_k_set[k_set] = nonzero_pairs(solver.values(joker_placed_sets_vars[k_set]))
 
-    return sets_on_table, tiles_placed, joker_sets_on_tables_by_k_set
+    return sets_on_tables_by_k_set, tiles_placed
 
 
 def find_best_move_strings(table_set_strings: list[str], rack_string: str, config: Config) -> RummiResult:

@@ -167,7 +167,7 @@ class Config:
 
 
 @dataclass
-class JokerParams:
+class TilesetModelParams:
     set_tile_matrices_by_k_set: dict[tuple, ndarray]
     """
     2d arrays where each column corresponds to a set, and each value in the column is the count of the corresponding tile in that set 
