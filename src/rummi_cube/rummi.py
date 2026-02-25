@@ -7,8 +7,9 @@ from ortools.sat.python import cp_model
 from ortools.sat.python.cp_model import IntVar
 from pandas import Series
 
-from rummi_cube.structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, COLOURS, TilesetModelParams, Tileset
-from rummi_cube.tileset_generation import JOKER, generate_all_sets
+from rummi_cube.structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, COLOURS, TilesetModelParams, Tileset, \
+    JOKER
+from rummi_cube.tileset_generation import generate_all_sets
 
 TILES = [Tile(c, v) for c in COLOURS for v in range(1, 14)] + [JOKER]
 TILE_VALUES = np.array([t.value for t in TILES])
@@ -103,13 +104,8 @@ def prepare_joker_locking_tileset_params(tilesets: list[Tileset]) -> TilesetMode
             substitution_tiles_by_k.append([])
 
         if tileset.is_run:
-            first_normal_tile_index, first_normal_tile_value = next(
-                (i, t.value) for i, t in enumerate(tileset) if not t.is_joker()
-            )
-            first_tile_value = first_normal_tile_value - first_normal_tile_index
-
             joker_indexes = [i for i, t in enumerate(tileset) if t.is_joker()]
-            joker_values = [first_tile_value + i for i in joker_indexes]
+            joker_values = [tileset.run_first_tile_value + i for i in joker_indexes]
 
             for i, joker_value in enumerate(joker_values):
                 substitution_tiles_by_k[seen_joker_count + i].append(Tile(tileset.run_colour, joker_value).index())
@@ -117,8 +113,8 @@ def prepare_joker_locking_tileset_params(tilesets: list[Tileset]) -> TilesetMode
             for K in non_empty_powerset(range(seen_joker_count, seen_joker_count + tileset.number_of_jokers)):
                 tilesets_with_jokers: list[Tileset] = []
 
-                for start in range(1, 1 + first_tile_value):
-                    for end in range(first_tile_value + len(tileset), 15):
+                for start in range(1, 1 + tileset.run_first_tile_value):
+                    for end in range(tileset.run_first_tile_value + len(tileset), 15):
                         run_tiles = []
                         for val in range(start, end):
                             if val in {joker_values[k - tileset.number_of_jokers] for k in K}:
@@ -134,7 +130,7 @@ def prepare_joker_locking_tileset_params(tilesets: list[Tileset]) -> TilesetMode
             # - The substitution tiles for each joker are all the same.
             # - Replacing the first joker and replacing the second etc is also arbitrary, so the tilesets are the same for all K of the same size.
             # This is fine and how the model is set up, possibly inefficient but since groups are only length 3-4 and only 2 jokers, not a big deal.
-            missing_colours = [c for c in COLOURS if c not in tileset.group_colours]
+            missing_colours = [c for c in COLOURS if c not in tileset.colours]
             for i in range(tileset.number_of_jokers):
                 for c in missing_colours:
                     substitution_tiles_by_k[seen_joker_count + i].append(Tile(c, tileset.group_value).index())
@@ -145,7 +141,7 @@ def prepare_joker_locking_tileset_params(tilesets: list[Tileset]) -> TilesetMode
                     for added_tile_count in range(5 - len(tileset)):
                         for added_tile_colours in combinations(set(missing_colours) - set(replaced_tile_colours),
                                                                added_tile_count):
-                            existing_tiles = [Tile(c, tileset.group_value) for c in tileset.group_colours]
+                            existing_tiles = [Tile(c, tileset.group_value) for c in tileset.colours]
                             jokers = [JOKER] * len(K)
                             replaced_tiles = [Tile(c, tileset.group_value) for c in replaced_tile_colours]
                             added_tiles = [Tile(c, tileset.group_value) for c in added_tile_colours]

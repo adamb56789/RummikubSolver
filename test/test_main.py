@@ -302,7 +302,7 @@ class TestRummi(unittest.TestCase):
 
     def test_random_one_set_on_table_with_both_jokers_locking(self):
         random.seed(0)
-        expected_placed_list = [5, 7, 3, 10, 3, 8, 6, 4, 6, 8]
+        expected_placed_list = [5, 4, 3, 8, 3, 8, 6, 3, 5, 8]
         for expected_placed in expected_placed_list:
             sets_with_no_joker = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 0]
             sets_with_two_jokers = [s for s in SETS if Counter(t.colour for t in s).get("J", 0) == 2]

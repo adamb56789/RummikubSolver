@@ -1,6 +1,7 @@
-from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
+from functools import cached_property
+from itertools import islice
 from typing import Optional, Iterable
 
 from numpy import ndarray
@@ -38,56 +39,22 @@ class Tile:
 
 class Tileset:
     is_run: bool
-    is_group: bool
-    run_colour: str
-    group_value: int
-    group_colours: list[str]
-    number_of_jokers: int
-    contains_joker: bool
 
     tiles: tuple[Tile, ...]
 
     def __init__(self, tiles: Iterable[Tile]):
-        tiles = list(tiles)
+        self.tiles = tuple(tiles)
 
-        colour_count = Counter(t.colour for t in tiles)
-        number_of_jokers = colour_count.get("J", 0)
-
-        is_ambiguous = False
-        if len(tiles) - number_of_jokers < 2:
-            is_ambiguous = True
-            self.is_group = True
-
-            # Can only be a run if there is space for it, e.g. (J a1 J) cannot.
-            first_normal_tile_index, first_normal_tile_value = next(
-                (i, t.value) for i, t in enumerate(tiles) if not t.is_joker()
-            )
-            first_tile_value = first_normal_tile_value - first_normal_tile_index
-            self.is_run = 1 <= first_tile_value and (first_tile_value + len(tiles)) <= 13
-        elif len(colour_count) <= 2:
-            self.is_run = True
-            self.is_group = False
-        else:
-            self.is_run = False
-            self.is_group = True
-
-        set_colours = list(colour_count.keys())
-        if "J" in set_colours:
-            set_colours.remove("J")
+        # The order sometimes matters for Tilesets with only one real tile, even if they cannot not be a run.
+        # For example (J a1 J) cannot be switched with (a1 J J) as then it could become a run.
+        # It can however be switched with (J J a1). We use for example (J J a1) or (a12 J J) as the canonical form.
         if self.is_run:
-            self.run_colour = set_colours[0]
-
-        if self.is_group:
-            self.group_value = next(t for t in tiles if not t.is_joker()).value
-            self.group_colours = set_colours
-
-        if self.is_group and not is_ambiguous:
-            self.tiles = tuple(sorted(tiles))
+            self.tiles = tuple(self.tiles)
         else:
-            self.tiles = tuple(tiles)
-
-        self.number_of_jokers = number_of_jokers
-        self.contains_joker = number_of_jokers > 0
+            if self.has_only_one_real_tile:
+                # If the real tile's value is 12 or 13 then reverse sort puts the J on the end like (a12 J J)
+                self.tiles = tuple(sorted(self.tiles, reverse=self.run_first_tile_value > 11))
+            self.tiles = tuple(sorted(self.tiles))
 
     def __len__(self):
         return len(self.tiles)
@@ -110,29 +77,61 @@ class Tileset:
     def __repr__(self):
         return "(" + " ".join(str(t) for t in self.tiles) + ")"
 
+    @cached_property
+    def is_run(self):
+        if self.has_only_one_real_tile:
+            return 1 <= self.run_first_tile_value and self.run_first_tile_value + len(self.tiles) <= 13
+
+        return len(self.colours) == 1
+
+    @cached_property
+    def is_group(self):
+        return len(self.colours) > 1 or self.has_only_one_real_tile
+
+    @cached_property
+    def has_only_one_real_tile(self):
+        return len(self.tiles) - self.number_of_jokers < 2
+
+    @cached_property
+    def number_of_jokers(self) -> int:
+        return len([t for t in self.tiles if t.is_joker()])
+
+    @cached_property
+    def contains_joker(self) -> bool:
+        return self.number_of_jokers > 0
+
+    @cached_property
+    def run_first_tile_value(self) -> int:
+        first_real_tile = next(t for t in self.tiles if not t.is_joker())
+        return first_real_tile.value - self.tiles.index(first_real_tile)
+
+    @cached_property
+    def run_colour(self) -> str:
+        if not self.is_run:
+            raise ValueError("Tileset must be a run")
+
+        return next(t.colour for t in self.tiles if not t.is_joker())
+
+    @cached_property
+    def group_value(self) -> int:
+        if not self.is_group:
+            raise ValueError("Tileset must be a run")
+
+        return next(t for t in self.tiles if not t.is_joker()).value
+
+    @cached_property
+    def colours(self) -> list[str]:
+        return list({t.colour for t in self.tiles if not t.is_joker()})
+
     def split_tileset(self) -> list['Tileset']:
-        n = len(self)
-        assert n >= 6
-
+        it = iter(self.tiles)
+        n = len(self.tiles)
         result = []
-        i = 0
 
-        while n > 0:
-            if n == 6:
-                sizes = (3, 3)
-            elif n == 7:
-                sizes = (3, 4)
-            elif n == 8:
-                sizes = (4, 4)
-            elif n == 9:
-                sizes = (4, 5)
-            else:
-                sizes = (5,)
-
-            for s in sizes:
-                result.append(Tileset(self.tiles[i:i + s]))
-                i += s
-                n -= s
+        while n:
+            s = 5 if n > 7 else 4 if n == 7 else 3 if n > 5 else n
+            result.append(Tileset(list(islice(it, s))))
+            n -= s
 
         return result
 
@@ -198,3 +197,4 @@ class RummiResult:
 
 
 COLOURS = "brya"
+JOKER = Tile("J", 0)

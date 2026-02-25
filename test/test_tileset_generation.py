@@ -26,4 +26,4 @@ class TestTilesetGeneration(TestCase):
         self.assertEqual(325, len(generate_all_groups()))
 
     def test_generate_all_tilesets_count(self):
-        self.assertEqual(1605, len(generate_all_sets()))
+        self.assertEqual(1589, len(generate_all_sets()))
