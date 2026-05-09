@@ -1,8 +1,9 @@
+from functools import cache
 from itertools import combinations
 
 from rummi_cube.structs import Tileset, COLOURS, Tile, JOKER
 
-
+@cache
 def generate_all_runs():
     runs: list[Tileset] = []
     for c in COLOURS:
@@ -17,7 +18,7 @@ def generate_all_runs():
                         runs.append(Tileset(tiles))
     return runs
 
-
+@cache
 def generate_all_groups():
     groups: list[Tileset] = []
 
@@ -29,13 +30,10 @@ def generate_all_groups():
 
     return groups
 
-
+@cache
 def generate_all_sets():
     sets: set[Tileset] = set()
     sets.update(generate_all_runs())
     sets.update(generate_all_groups())
 
     return sorted(sets)
-
-def generate_joker_groups(seen_joker_count: int, tileset: Tileset):
-    groups: list[Tileset] = []

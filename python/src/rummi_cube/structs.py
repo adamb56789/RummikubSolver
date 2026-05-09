@@ -205,6 +205,28 @@ class RummiResult:
             Tile.list_from_str(remaining),
         )
 
+    def display(self, previous_table: list[Tileset]):
+        previous_sets = [ts for ts in self.table if ts in previous_table]
+        new_sets = [ts for ts in self.table if ts not in previous_table]
+
+        lines = [
+            f"Tiles remaining in your rack: {str(self.remaining).strip('[]').replace(',', '')}",
+            f"Tiles placed from your rack: {str(self.placed).strip('[]').replace(',', '')}",
+            "",
+            "Table untouched:",
+        ]
+
+        lines.extend(str(ts).strip("()") for ts in previous_sets)
+
+        lines.extend([
+            "",
+            "Table updated:",
+        ])
+
+        lines.extend(str(ts).strip("()") for ts in new_sets)
+
+        return "\n".join(lines)
+
 
 COLOURS = "brya"
 JOKER = Tile("J", 0)
