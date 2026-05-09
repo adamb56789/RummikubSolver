@@ -1,15 +1,14 @@
 import random
 import unittest
 from collections import Counter
-from itertools import product
 
-from rummi_cube.structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, Tileset
-from src.rummi_cube.rummi import find_best_move, find_best_move_strings, SETS
+from rummi_cube.structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, Tileset, \
+    ALL_TILES_STRINGS_WITH_JOKERS, ALL_TILES_STRINGS
+from src.rummi_cube.rummi import find_best_move, find_best_move_strings, SETS, InfeasibleSolutionException
 
 JOKER_LOCK_CONFIG = Config(JokerMode.LOCKING, MaximizeMode.TILES_PLACED)
 
-ALL_TILES_STRINGS = [c + str(val) for c, val in product("brya", range(1, 14))] * 2
-ALL_TILES_STRINGS_WITH_JOKERS = ALL_TILES_STRINGS + ["J"] * 2
+
 
 
 class TestRummi(unittest.TestCase):
@@ -26,7 +25,7 @@ class TestRummi(unittest.TestCase):
             table_sets = []
             if table_set_strings is not None:
                 table_sets = [Tileset.from_str(s) for s in table_set_strings]
-        rack_tiles = Tile.from_str(rack_str)
+        rack_tiles = Tile.list_from_str(rack_str)
 
         config = Config(joker_mode=JokerMode.FREE, maximize_mode=MaximizeMode.TILES_PLACED)
         result = find_best_move(table_sets, rack_tiles, config)
@@ -108,23 +107,21 @@ class TestRummi(unittest.TestCase):
     def test_all_tiles(self):
         self.validate_sets(" ".join(ALL_TILES_STRINGS_WITH_JOKERS), 0)
 
-    # def test_all_tiles_some_on_table(self):
-    #     # TODO sometimes only finds 20?
-    #     random.seed(1)
-    #     tile_strings = ALL_TILES_STRINGS_WITH_JOKERS.copy()
-    #     random.shuffle(tile_strings)
-    #     rack = " ".join(tile_strings[80:])
-    #     table_tiles = " ".join(tile_strings[:80])
-    #
-    #     # Place the first 80 tiles
-    #     sets_on_table, tiles_placed, remaining_tiles = find_best_move([], Tile.from_str(table_tiles))
-    #     print_results(sets_on_table, tiles_placed, remaining_tiles)
-    #     self.assertEqual(80, len(tiles_placed))
-    #
-    #     # Try to place the rest of them
-    #     # Without the unnecessary change optimization there are a variable number usually around 0-5 unmodified,
-    #     # with it should be optimal every time.
-    #     self.validate_sets(rack, 0, sets_on_table, expected_unmodified=19)
+    def test_all_tiles_some_on_table(self):
+        random.seed(1)
+        tile_strings = ALL_TILES_STRINGS_WITH_JOKERS.copy()
+        random.shuffle(tile_strings)
+        rack = " ".join(tile_strings[80:])
+        table_tiles = " ".join(tile_strings[:80])
+
+        # Place the first 80 tiles
+        config = Config(JokerMode.FREE, MaximizeMode.TILES_PLACED)
+        result = find_best_move([], Tile.list_from_str(table_tiles), config)
+
+        # Try to place the rest of them
+        # Without the unnecessary change optimization there are a variable number usually around 0-5 unmodified,
+        # with it should be optimal every time.
+        self.validate_sets(rack, 0, result.table, expected_unmodified=19)
 
     def test_set_on_table_not_in_minimized_sets(self):
         self.validate_sets("a5", 0, table_set_strings=["J J a3 a4"])
@@ -133,23 +130,23 @@ class TestRummi(unittest.TestCase):
         # Maximizing the number of tiles it should put the joker in the 5-run
         config = Config(JokerMode.FREE, MaximizeMode.TILES_PLACED)
         result = find_best_move_strings([], "a1 a2 a4 a5 a13 b13 J", config)
-        self.assertCountEqual(Tile.from_str("a1 a2 J a4 a5"), result.placed)
+        self.assertCountEqual(Tile.list_from_str("a1 a2 J a4 a5"), result.placed)
 
     def test_maximize_value(self):
         # Maximizing the value it should use the joker for the 13 group even though it is fewer tiles
         config = Config(JokerMode.FREE, MaximizeMode.VALUE_PLACED, joker_value=0)
         result = find_best_move_strings([], "a1 a2 a4 a5 a13 b13 J", config)
-        self.assertCountEqual(Tile.from_str("a13 b13 J"), result.placed)
+        self.assertCountEqual(Tile.list_from_str("a13 b13 J"), result.placed)
 
     def test_maximize_value_plays_joker_when_30(self):
         config = Config(JokerMode.FREE, MaximizeMode.VALUE_PLACED, joker_value=30)
         result = find_best_move_strings([], "a1 a2 a3 J", config)
-        self.assertCountEqual(Tile.from_str("a1 a2 a3 J"), result.placed)
+        self.assertCountEqual(Tile.list_from_str("a1 a2 a3 J"), result.placed)
 
     def test_maximize_value_does_not_play_joker_when_negative(self):
         config = Config(JokerMode.FREE, MaximizeMode.VALUE_PLACED, joker_value=-1)
         result = find_best_move_strings([], "a1 a2 a3 J", config)
-        self.assertCountEqual(Tile.from_str("a1 a2 a3"), result.placed)
+        self.assertCountEqual(Tile.list_from_str("a1 a2 a3"), result.placed)
 
     def test_minimize_rearrange(self):
         # To ensure the model doesn't just happen to pick the right one, we test it can both minimize and maximize rearrangement
@@ -297,7 +294,7 @@ class TestRummi(unittest.TestCase):
             rack_string = " ".join(random.sample(ALL_TILES_STRINGS, k=10))
 
             with self.subTest(msg=rack_string):
-                result = find_best_move(table_sets, Tile.from_str(rack_string), JOKER_LOCK_CONFIG)
+                result = find_best_move(table_sets, Tile.list_from_str(rack_string), JOKER_LOCK_CONFIG)
                 self.assertEqual(expected_placed, len(result.placed))
 
     def test_random_one_set_on_table_with_both_jokers_locking(self):
@@ -311,7 +308,7 @@ class TestRummi(unittest.TestCase):
             rack_string = " ".join(random.sample(ALL_TILES_STRINGS, k=10))
 
             with self.subTest(msg=rack_string):
-                result = find_best_move(table_sets, Tile.from_str(rack_string), JOKER_LOCK_CONFIG)
+                result = find_best_move(table_sets, Tile.list_from_str(rack_string), JOKER_LOCK_CONFIG)
                 self.assertEqual(expected_placed, len(result.placed))
 
     def test_random_one_set_on_table_with_one_joker_and_joker_on_rack_locking(self):
@@ -325,7 +322,7 @@ class TestRummi(unittest.TestCase):
             rack_string = " ".join(random.sample(ALL_TILES_STRINGS, k=10)) + " J"
 
             with self.subTest(msg=rack_string):
-                result = find_best_move(table_sets, Tile.from_str(rack_string), JOKER_LOCK_CONFIG)
+                result = find_best_move(table_sets, Tile.list_from_str(rack_string), JOKER_LOCK_CONFIG)
                 self.assertEqual(expected_placed, len(result.placed))
 
     def test_what_happens_if_you_add_more_than_two_jokers(self):
@@ -337,10 +334,30 @@ class TestRummi(unittest.TestCase):
         expected = RummiResult.from_strings(["J a2 J a4 a5 a6 J", "y4 y5 J"], "a4 y4 y5", "")
         self.assert_result_equal(expected, result)
 
+    def test_when_tile_limit_plays_most_valuable(self):
+        config = Config(JokerMode.FREE, MaximizeMode.VALUE_PLACED, joker_value=1, placed_tiles_limit=2)
+
+        result = find_best_move_strings(["a1 b1 r1", "a2 b2 r2", "a3 b3 r3", "a4 b4 r4"], "y1 y2 y3 y4", config)
+        expected = RummiResult.from_strings(["a1 b1 r1", "a2 b2 r2", "a3 b3 r3 y3", "a4 b4 r4 y4"], "y3 y4", "y1 y2")
+        self.assert_result_equal(expected, result)
+
+    def test_minimum_non_zero_placed(self):
+        config = Config(JokerMode.FREE, MaximizeMode.MINIMUM_NON_ZERO_PLACED, joker_value=1)
+
+        result = find_best_move_strings(["a1 b1 r1", "a2 b2 r2", "a3 b3 r3", "a4 b4 r4"], "y1 y2 y3 y4", config)
+        expected = RummiResult.from_strings(["a1 b1 r1", "a2 b2 r2", "a3 b3 r3", "a4 b4 r4 y4"], "y4", "y1 y2 y3")
+        self.assert_result_equal(expected, result)
+
+    def test_minimum_non_zero_placed_no_solution(self):
+        config = Config(JokerMode.FREE, MaximizeMode.MINIMUM_NON_ZERO_PLACED, joker_value=1)
+
+        with self.assertRaises(InfeasibleSolutionException):
+            find_best_move_strings(["a1 b1 r1", "a2 b2 r2", "a3 b3 r3", "a4 b4 r4"], "y5", config)
+
     def assert_sets_equal(self, expected_sets: list[str], actual_sets: list[tuple[Tile, ...]]):
-        self.assertCountEqual([tuple(Tile.from_str(s)) for s in expected_sets], actual_sets)
+        self.assertCountEqual([tuple(Tile.list_from_str(s)) for s in expected_sets], actual_sets)
 
     def assert_result_equal(self, expected: RummiResult, actual: RummiResult):
-        self.assertCountEqual(expected.table, actual.table)
-        self.assertCountEqual(expected.placed, actual.placed)
-        self.assertCountEqual(expected.remaining, actual.remaining)
+        self.assertCountEqual(expected.placed, actual.placed, f"Expected {expected.placed} placed, but got {actual.placed} placed")
+        self.assertCountEqual(expected.remaining, actual.remaining, f"Expected {expected.remaining} remaining, but got {actual.remaining} remaining")
+        self.assertCountEqual(expected.table, actual.table, f"Expected {expected.table} table, but got {actual.table} table")

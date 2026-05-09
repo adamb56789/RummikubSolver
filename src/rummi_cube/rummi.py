@@ -24,6 +24,10 @@ for tiles, j in SET_TO_INDEX_MAP.items():
         SET_TILE_MATRIX[t.index(), j] += 1
 
 
+class InfeasibleSolutionException(Exception):
+    pass
+
+
 def find_best_move(
         table_sets: list[Tileset],
         rack_tiles: list[Tile],
@@ -234,22 +238,35 @@ def solve_cp_model(
         model.add_min_equality(unmodified_sets_var[j], [table_sets_array[j], joker_placed_sets_vars[()][j]])
 
     if config.maximize_mode == MaximizeMode.VALUE_PLACED:
+        # When maximizing value, the joker value must be set in the config
         TILE_VALUES[JOKER.index()] = config.joker_value
+
+        # Optional limiting number of tiles placed
+        if config.placed_tiles_limit is not None:
+            model.add(sum(placed_tiles_var) <= config.placed_tiles_limit)
+
         model.maximize((placed_tiles_var * TILE_VALUES).sum() + config.rearrange_value * unmodified_sets_var.sum())
-    else:
+    elif config.maximize_mode == MaximizeMode.TILES_PLACED:
         # The paper does not include the change-minimization term in this version, but we add it anyway
         model.maximize(placed_tiles_var.sum() + config.rearrange_value * unmodified_sets_var.sum())
+    elif config.maximize_mode == MaximizeMode.MINIMUM_NON_ZERO_PLACED:
+        model.add(placed_tiles_var.sum() > 0)
+
+        TILE_VALUES[JOKER.index()] = config.joker_value
+        model.maximize(-1000 * placed_tiles_var.sum() + (
+                    placed_tiles_var * TILE_VALUES).sum() + config.rearrange_value * unmodified_sets_var.sum())
+    else:
+        raise RuntimeError("Invalid maximize mode")
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 10.0
-    # TODO tune this, for some reason it is faster on 1 when running the test suite
+    solver.parameters.max_time_in_seconds = 2
     solver.parameters.num_workers = 1
 
     status = solver.solve(model)
 
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         if status == cp_model.INFEASIBLE:
-            raise RuntimeError("Infeasible solution")
+            raise InfeasibleSolutionException()
         raise RuntimeError("Invalid state")
 
     tiles_solution = solver.values(placed_tiles_var).to_numpy()
@@ -266,7 +283,7 @@ def solve_cp_model(
 def find_best_move_strings(table_set_strings: list[str], rack_string: str, config: Config) -> RummiResult:
     return find_best_move(
         [Tileset.from_str(s) for s in table_set_strings],
-        Tile.from_str(rack_string),
+        Tile.list_from_str(rack_string),
         config
     )
 

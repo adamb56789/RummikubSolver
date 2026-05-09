@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
-from itertools import islice
+from itertools import islice, product
 from typing import Optional, Iterable
 
 from numpy import ndarray
@@ -28,7 +28,7 @@ class Tile:
         return self.colour == "J"
 
     @staticmethod
-    def from_str(s: str) -> list['Tile']:
+    def list_from_str(s: str) -> list['Tile']:
         if not s:
             return []
         return [
@@ -142,10 +142,16 @@ class Tileset:
             for tile in s.split(" ")
         ])
 
+    def numerical_value_to_enter_game(self):
+        group_value = self.group_value * len(self) if self.is_group else 0
+        run_value = sum(self.run_first_tile_value + i for i in range(len(self))) if self.is_run else 0
+        return max(group_value, run_value)
+
 
 class MaximizeMode(Enum):
     TILES_PLACED = "tiles_placed"
     VALUE_PLACED = "value_placed"
+    MINIMUM_NON_ZERO_PLACED = "minimum_non_zero_placed"
 
 
 class JokerMode(Enum):
@@ -159,10 +165,14 @@ class Config:
     maximize_mode: MaximizeMode
     joker_value: Optional[int] = None
     rearrange_value: float = 1 / 40
+    placed_tiles_limit: Optional[int] = None
 
     def __post_init__(self):
         if self.maximize_mode == MaximizeMode.VALUE_PLACED and self.joker_value is None:
-            raise Exception("Joker value must be set")
+            raise Exception("Joker value must be set when maximizing value")
+
+        if self.maximize_mode == MaximizeMode.TILES_PLACED and self.placed_tiles_limit is not None:
+            raise Exception("Cannot both maximize and limit number of tiles placed")
 
 
 @dataclass
@@ -191,10 +201,13 @@ class RummiResult:
     def from_strings(table: list[str], placed: str, remaining: str) -> 'RummiResult':
         return RummiResult(
             [Tileset.from_str(s) for s in table],
-            Tile.from_str(placed),
-            Tile.from_str(remaining),
+            Tile.list_from_str(placed),
+            Tile.list_from_str(remaining),
         )
 
 
 COLOURS = "brya"
 JOKER = Tile("J", 0)
+
+ALL_TILES_STRINGS = [c + str(val) for c, val in product("brya", range(1, 14))] * 2
+ALL_TILES_STRINGS_WITH_JOKERS = ALL_TILES_STRINGS + ["J"] * 2
