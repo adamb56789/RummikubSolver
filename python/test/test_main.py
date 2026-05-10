@@ -293,9 +293,6 @@ class TestRummi(unittest.TestCase):
 
             rack_string = " ".join(random.sample(ALL_TILES_STRINGS, k=10))
 
-            print(table_sets)
-            print(rack_string)
-
             with self.subTest(msg=rack_string):
                 result = find_best_move(table_sets, Tile.list_from_str(rack_string), JOKER_LOCK_CONFIG)
                 self.assertEqual(expected_placed, len(result.placed))

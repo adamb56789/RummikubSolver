@@ -208,8 +208,10 @@ def maximize_value_always_saves_joker_and_joker_substitutes(table: list[Tileset]
 
         rack_tiles_to_play = remove_jokers_and_substitutions_from_rack(rack, table)
 
-        value_config = Config(joker_mode, maximize_mode=MaximizeMode.VALUE_PLACED, joker_value=-1)
-        return find_best_move(table, rack_tiles_to_play, value_config)
+        config = Config(joker_mode, maximize_mode=MaximizeMode.VALUE_PLACED, joker_value=-1)
+        result = find_best_move(table, rack_tiles_to_play, config)
+        result.remaining.extend(t for t in rack if t not in rack_tiles_to_play)  # Add the skipped tiles back in
+        return result
 
 
 def minimum_non_zero_placed_always_saves_joker_and_joker_substitutes(table: list[Tileset], rack: list[Tile],
@@ -228,7 +230,9 @@ def minimum_non_zero_placed_always_saves_joker_and_joker_substitutes(table: list
 
         config = Config(joker_mode, maximize_mode=MaximizeMode.MINIMUM_NON_ZERO_PLACED, joker_value=-1)
         try:
-            return find_best_move(table, rack_tiles_to_play, config)
+            result = find_best_move(table, rack_tiles_to_play, config)
+            result.remaining.extend(t for t in rack if t not in rack_tiles_to_play) # Add the skipped tiles back in
+            return result
         except InfeasibleSolutionException:
             return RummiResult(table, [], rack)
 
