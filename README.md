@@ -1,6 +1,6 @@
-Rummikub solver using old "joker locking" rules. Served directly by a single AWS Lambda function with a function URL.
+Rummikub solver using old "joker locking" rules. Served directly by a single AWS Lambda function with a function URL. Can take a long time to load for the first time from lambda cold start, as it uses big Python libraries in a container.
 
-Visit website: https://jeae5te7l4yzzmh7c3tjszhdwy0njroy.lambda-url.eu-west-1.on.aws
+Visit website: https://jeae5te7l4yzzmh7c3tjszhdwy0njroy.lambda-url.eu-west-1.on.aws.
 
 ## Useful commands
 
