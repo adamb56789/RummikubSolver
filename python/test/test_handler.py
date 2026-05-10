@@ -46,3 +46,10 @@ class TestLambdaHandler(TestCase):
         response = lambda_handler(get_test_event("/place-minimum", ["a13 b13 y13", "a1 a2 a3"], "a10 b10 r10"), None)
 
         self.assertEqual(response["statusCode"], 200, response)
+
+    def test_idk(self):
+        event = get_test_event("/maximize-value", [], "y11 r5 a6 b13 y2 a12 y7 r4 y13 a13")
+        event["queryStringParameters"]["table"] = "r10 J0 r12 r13,r4 r5 J0,a12 r12 y12,a7 b7 y7,b4 b5 b6,a12 b12 r12,r7 r8 r9 r10 r11,a9 a10 a11,b2 b3 b4 b5 b6,b7 b8 b9 b10,y5 y6 y7 y8,b3 r3 y3"
+        response = lambda_handler(event, None)
+
+        self.assertEqual(response["statusCode"], 200, response)

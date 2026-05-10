@@ -7,3 +7,10 @@ dependencies = [
     "aws-lambda-powertools>=3.29.0",
     "ortools>=9.15.6755",
 ]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

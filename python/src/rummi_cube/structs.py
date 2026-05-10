@@ -205,27 +205,111 @@ class RummiResult:
             Tile.list_from_str(remaining),
         )
 
-    def display(self, previous_table: list[Tileset]):
+    def display(self, previous_table: list[Tileset]) -> str:
+        # TODO make an actual frontend which is not 100% vibes
         previous_sets = [ts for ts in self.table if ts in previous_table]
         new_sets = [ts for ts in self.table if ts not in previous_table]
 
-        lines = [
-            f"Tiles remaining in your rack: {str(self.remaining).strip('[]').replace(',', '')}",
-            f"Tiles placed from your rack: {str(self.placed).strip('[]').replace(',', '')}",
-            "",
-            "Table untouched:",
-        ]
+        untouched_html = "".join(
+            f"<div class='tileset'>{str(ts).strip('()')}</div>"
+            for ts in previous_sets
+        )
 
-        lines.extend(str(ts).strip("()") for ts in previous_sets)
+        updated_html = "".join(
+            f"<div class='tileset'>{str(ts).strip('()')}</div>"
+            for ts in new_sets
+        )
 
-        lines.extend([
-            "",
-            "Table updated:",
-        ])
+        return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta charset="utf-8">
+    <title>Rummi Solver</title>
 
-        lines.extend(str(ts).strip("()") for ts in new_sets)
+    <link rel="icon" href="data:,">
 
-        return "\n".join(lines)
+    <style>
+    body {{
+        background: #f5f5f5;
+        color: #222;
+        font-family: Consolas, Monaco, monospace;
+        margin: 0;
+        padding: 40px;
+    }}
+
+    .container {{
+        max-width: 900px;
+        margin: 0 auto;
+    }}
+
+    .card {{
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }}
+
+    h1 {{
+        margin-top: 0;
+    }}
+
+    .section-title {{
+        margin-top: 24px;
+        margin-bottom: 12px;
+        font-size: 1.1rem;
+        font-weight: bold;
+    }}
+
+    .tileset {{
+        padding: 8px 12px;
+        margin: 6px 0;
+        background: #fafafa;
+        border-left: 4px solid #888;
+        border-radius: 6px;
+    }}
+
+    .remaining {{
+        color: #666;
+    }}
+
+    .placed {{
+        color: #0a7a2f;
+        font-weight: bold;
+    }}
+    </style>
+    </head>
+
+    <body>
+    <div class="container">
+
+    <div class="card">
+        <h1>Rummi Solver</h1>
+
+        <div class="remaining">
+            <strong>Tiles remaining:</strong><br>
+            {str(self.remaining).strip('[]').replace(',', '') or '(none)'}
+        </div>
+
+        <br>
+
+        <div class="placed">
+            <strong>Tiles placed:</strong><br>
+            {str(self.placed).strip('[]').replace(',', '') or '(none)'}
+        </div>
+
+        <div class="section-title">Table untouched</div>
+        {untouched_html or "<i>None</i>"}
+
+        <div class="section-title">Table updated</div>
+        {updated_html or "<i>None</i>"}
+
+    </div>
+    </div>
+    </body>
+    </html>
+    """
 
 
 COLOURS = "brya"

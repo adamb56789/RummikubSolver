@@ -16,11 +16,13 @@ def lambda_handler(event: LambdaFunctionUrlEvent, context):
     if event.request_context.http.method != "GET":
         return {"statusCode": 400, "body": "Invalid method"}
 
-    table_string = event.query_string_parameters.get("table", [])
-    rack_string = event.query_string_parameters.get("rack").lower()
+    table_string = event.query_string_parameters.get("table", "")
+    rack_string = event.query_string_parameters.get("rack")
 
     if not rack_string:
         return {"statusCode": 400, "body": "Missing rack parameter"}
+
+    rack_string = rack_string.lower().replace("j", "J")
 
     if not tile_string_is_valid(rack_string):
         return {"statusCode": 400, "body": "Rack must be of form 'a4 b4 r4 y4'"}
@@ -33,7 +35,7 @@ def lambda_handler(event: LambdaFunctionUrlEvent, context):
     if not tile_values_in_range(rack):
         return {"statusCode": 400, "body": "Tile values must be between 1 and 13"}
 
-    tileset_strings = [s.lower() for s in table_string.split(",") if s]  # Filter out empty strings
+    tileset_strings = [s.lower().replace("j", "J") for s in table_string.split(",") if s]  # Filter out empty strings
 
     # Definitely not bulletproof input validation but good enough to catch typos
     table = []
@@ -70,21 +72,27 @@ def lambda_handler(event: LambdaFunctionUrlEvent, context):
         if not result.placed:
             return {"statusCode": 200, "body": "Pick up a tile"}
 
-        return {"statusCode": 200, "body": result.display(table)}
+        return {"statusCode": 200, "body": result.display(table), "headers": {
+            "Content-Type": "text/html"
+        }, }
     elif event.raw_path == "/maximize-value":
         result = maximize_value_always_saves_joker_and_joker_substitutes(table, rack, True)
 
         if not result.placed:
             return {"statusCode": 200, "body": "Pick up a tile"}
 
-        return {"statusCode": 200, "body": result.display(table)}
+        return {"statusCode": 200, "body": result.display(table), "headers": {
+            "Content-Type": "text/html"
+        }, }
     elif event.raw_path == "/place-minimum":
         result = minimum_non_zero_placed_always_saves_joker_and_joker_substitutes(table, rack, True)
 
         if not result.placed:
             return {"statusCode": 200, "body": "Pick up a tile"}
 
-        return {"statusCode": 200, "body": result.display(table)}
+        return {"statusCode": 200, "body": result.display(table), "headers": {
+            "Content-Type": "text/html"
+        }, }
     else:
         return {"statusCode": 400, "body": f"{event.raw_path} is not a valid path"}
 
@@ -94,6 +102,6 @@ def tile_values_in_range(tiles: Iterable[Tile]) -> bool:
 
 
 def tile_string_is_valid(rack_string: str) -> bool:
-    if re.match(r"^([abryj][0-9]* )*[abryj][0-9]*$", rack_string):
+    if re.match(r"^([abryJ][0-9]* )*[abryJ][0-9]*$", rack_string):
         return True
     return False
