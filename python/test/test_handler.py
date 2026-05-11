@@ -35,7 +35,7 @@ class TestLambdaHandler(TestCase):
 
     def test_entry(self):
         response = lambda_handler(get_test_event("/solve", ["a13 b13 y13", "a1 a2 a3"], "a10 b10 r10", "entry"), None)
-
+        print(response)
         self.assertEqual(response["statusCode"], 200, response)
 
     def test_maximize_value(self):

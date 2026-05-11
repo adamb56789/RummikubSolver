@@ -114,7 +114,7 @@ button:hover {
     margin-top: 6px;
 }
 
-.error-box {{
+.error-box {
     background: #fff1f2;
     border-left: 4px solid #dc2626;
     color: #7f1d1d;
@@ -122,7 +122,46 @@ button:hover {
     border-radius: 8px;
     white-space: pre-wrap;
     line-height: 1.5;
-}}
+}
+
+.tile {
+    display: inline-block;
+    padding: 2px 6px;
+    margin: 1px;
+    border-radius: 4px;
+    font-weight: bold;
+    user-select: text;
+}
+
+.tile-red {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.tile-blue {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.tile-yellow {
+    background: #fef9c3;
+    color: #854d0e;
+}
+
+.tile-black {
+    background: #e5e7eb;
+    color: #111827;
+}
+
+.tile-joker {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.tile-default {
+    background: #f3f4f6;
+    color: #374151;
+}
 
 </style>
 </head>
@@ -229,18 +268,54 @@ def home_page():
     """
 
 
+import re
+
+
+def render_tiles(text: str) -> str:
+    """
+    Converts tile strings like:
+        r10 b5 y13 a1 J
+    into coloured HTML spans.
+    """
+
+    def repl(match):
+        tile = match.group(0)
+
+        first = tile[0].lower()
+
+        colour_class = {
+            "r": "tile-red",
+            "b": "tile-blue",
+            "y": "tile-yellow",
+            "a": "tile-black",
+            "j": "tile-joker",
+        }.get(first, "tile-default")
+
+        return f"<span class='tile {colour_class}'>{tile}</span>"
+
+    return re.sub(r"\b[a-zA-Z]\d*\b", repl, text)
+
+
 def display_result(result: RummiResult, previous_table: list[Tileset]):
     previous_sets = [ts for ts in result.table if ts in previous_table]
     new_sets = [ts for ts in result.table if ts not in previous_table]
 
     untouched_html = "".join(
-        f"<div class='tileset'>{str(ts).strip('()')}</div>"
+        f"<div class='tileset'>{render_tiles(str(ts).strip('()'))}</div>"
         for ts in previous_sets
     )
 
     updated_html = "".join(
-        f"<div class='tileset'>{str(ts).strip('()')}</div>"
+        f"<div class='tileset'>{render_tiles(str(ts).strip('()'))}</div>"
         for ts in new_sets
+    )
+
+    remaining_html = render_tiles(
+        str(result.remaining).strip('[]').replace(',', '')
+    )
+
+    placed_html = render_tiles(
+        str(result.placed).strip('[]').replace(',', '')
     )
 
     return f"""
@@ -254,14 +329,14 @@ def display_result(result: RummiResult, previous_table: list[Tileset]):
 
             <div class="remaining">
                 <strong>Tiles remaining:</strong><br>
-                {str(result.remaining).strip('[]').replace(',', '') or '(none)'}
+                {remaining_html or '(none)'}
             </div>
 
             <br>
 
             <div class="placed">
                 <strong>Tiles placed:</strong><br>
-                {str(result.placed).strip('[]').replace(',', '') or '(none)'}
+                {placed_html or '(none)'}
             </div>
 
             <div class="section-title">Table untouched</div>
@@ -275,7 +350,6 @@ def display_result(result: RummiResult, previous_table: list[Tileset]):
         </body>
         </html>
         """
-
 
 def error_page(message: str):
     return f"""
