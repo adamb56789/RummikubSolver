@@ -111,7 +111,7 @@ def handle_event(event: LambdaFunctionUrlEvent):
             return "Pick up a tile"
 
         return display_result(result, table)
-    elif strategy == "place_minimum":
+    elif strategy == "minimum_tiles":
         result = minimum_non_zero_placed_always_saves_joker_and_joker_substitutes(table, rack, True)
 
         if not result.placed:
