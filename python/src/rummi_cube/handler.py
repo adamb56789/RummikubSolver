@@ -4,9 +4,8 @@ from typing import Iterable
 from aws_lambda_powertools.utilities.data_classes import LambdaFunctionUrlEvent, event_source
 
 from rummi_cube.rummi import TILES
-from rummi_cube.strategies import remove_jokers_and_substitutions_from_rack, enter_asap, \
-    maximize_value_always_saves_joker_and_joker_substitutes, \
-    minimum_non_zero_placed_always_saves_joker_and_joker_substitutes
+from rummi_cube.strategies import maximize_value_always_saves_joker_and_joker_substitutes, \
+    minimum_non_zero_placed_always_saves_joker_and_joker_substitutes, entry_strategy
 from rummi_cube.structs import Tile, Tileset
 from rummi_cube.tileset_generation import generate_all_groups
 from rummi_cube.website import home_page, display_result, error_page
@@ -93,33 +92,18 @@ def handle_event(event: LambdaFunctionUrlEvent):
         table.append(tileset)
 
     if strategy == "entry":
-        rack_to_play = remove_jokers_and_substitutions_from_rack(rack, table)
-
-        result = enter_asap(rack_to_play, [])
-
-        if not result.placed:
-            return "Pick up a tile"
-
-        result.table.extend(table)
-        result.remaining.extend(t for t in rack if t not in rack_to_play)  # Add the skipped tiles back in
-
-        return display_result(result, table)
+        result = entry_strategy(table, rack)
     elif strategy == "maximize_value":
         result = maximize_value_always_saves_joker_and_joker_substitutes(table, rack, True)
-
-        if not result.placed:
-            return "Pick up a tile"
-
-        return display_result(result, table)
     elif strategy == "minimum_tiles":
         result = minimum_non_zero_placed_always_saves_joker_and_joker_substitutes(table, rack, True)
-
-        if not result.placed:
-            return "Pick up a tile"
-
-        return display_result(result, table)
     else:
         raise ClientError(f"{strategy} is not a strategy")
+
+    if not result.placed:
+        return "Pick up a tile"
+
+    return display_result(result, table)
 
 
 def tile_values_in_range(tiles: Iterable[Tile]) -> bool:

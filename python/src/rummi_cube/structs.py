@@ -148,7 +148,7 @@ class Tileset:
         return max(group_value, run_value)
 
 
-class MaximizeMode(Enum):
+class OptimizeMode(Enum):
     TILES_PLACED = "tiles_placed"
     VALUE_PLACED = "value_placed"
     MINIMUM_NON_ZERO_PLACED = "minimum_non_zero_placed"
@@ -162,16 +162,18 @@ class JokerMode(Enum):
 @dataclass
 class Config:
     joker_mode: JokerMode
-    maximize_mode: MaximizeMode
+    optimize_mode: OptimizeMode
     joker_value: Optional[int] = None
     rearrange_value: float = 1 / 40
-    placed_tiles_limit: Optional[int] = None
+    placed_tiles_maximum: Optional[int] = None
+    placed_value_minimum: Optional[int] = None
 
     def __post_init__(self):
-        if self.maximize_mode == MaximizeMode.VALUE_PLACED and self.joker_value is None:
+        if self.optimize_mode in [OptimizeMode.VALUE_PLACED,
+                                  OptimizeMode.MINIMUM_NON_ZERO_PLACED] and self.joker_value is None:
             raise Exception("Joker value must be set when maximizing value")
 
-        if self.maximize_mode == MaximizeMode.TILES_PLACED and self.placed_tiles_limit is not None:
+        if self.optimize_mode == OptimizeMode.TILES_PLACED and self.placed_tiles_maximum is not None:
             raise Exception("Cannot both maximize and limit number of tiles placed")
 
 

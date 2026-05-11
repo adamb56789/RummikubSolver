@@ -7,7 +7,7 @@ from ortools.sat.python import cp_model
 from ortools.sat.python.cp_model import IntVar
 from pandas import Series
 
-from rummi_cube.structs import Tile, MaximizeMode, JokerMode, Config, RummiResult, COLOURS, TilesetModelParams, Tileset, \
+from rummi_cube.structs import Tile, OptimizeMode, JokerMode, Config, RummiResult, COLOURS, TilesetModelParams, Tileset, \
     JOKER
 from rummi_cube.tileset_generation import generate_all_sets
 
@@ -237,24 +237,30 @@ def solve_cp_model(
         # set and placed set, in other words unmodified_sets_var[j] = min(table_sets_array[j], placed_sets_var[j])
         model.add_min_equality(unmodified_sets_var[j], [table_sets_array[j], joker_placed_sets_vars[()][j]])
 
-    if config.maximize_mode == MaximizeMode.VALUE_PLACED:
+    # Optional limiting number of tiles placed
+    if config.placed_tiles_maximum is not None:
+        model.add(sum(placed_tiles_var) <= config.placed_tiles_maximum)
+
+    # Optional minimum value placed (for 30 point starting minimum)
+    if config.placed_value_minimum is not None:
+        model.add(config.placed_value_minimum <= (placed_tiles_var * TILE_VALUES).sum())
+
+    if config.optimize_mode == OptimizeMode.VALUE_PLACED:
         # When maximizing value, the joker value must be set in the config
         TILE_VALUES[JOKER.index()] = config.joker_value
 
-        # Optional limiting number of tiles placed
-        if config.placed_tiles_limit is not None:
-            model.add(sum(placed_tiles_var) <= config.placed_tiles_limit)
-
         model.maximize((placed_tiles_var * TILE_VALUES).sum() + config.rearrange_value * unmodified_sets_var.sum())
-    elif config.maximize_mode == MaximizeMode.TILES_PLACED:
+    elif config.optimize_mode == OptimizeMode.TILES_PLACED:
         # The paper does not include the change-minimization term in this version, but we add it anyway
         model.maximize(placed_tiles_var.sum() + config.rearrange_value * unmodified_sets_var.sum())
-    elif config.maximize_mode == MaximizeMode.MINIMUM_NON_ZERO_PLACED:
+    elif config.optimize_mode == OptimizeMode.MINIMUM_NON_ZERO_PLACED:
+        # Remove 0 as an option, otherwise place huge negative modifier to number of tiles.
+        # Break number-of-tile ties with value and rearrange.
         model.add(placed_tiles_var.sum() > 0)
 
         TILE_VALUES[JOKER.index()] = config.joker_value
         model.maximize(-1000 * placed_tiles_var.sum() + (
-                    placed_tiles_var * TILE_VALUES).sum() + config.rearrange_value * unmodified_sets_var.sum())
+                placed_tiles_var * TILE_VALUES).sum() + config.rearrange_value * unmodified_sets_var.sum())
     else:
         raise RuntimeError("Invalid maximize mode")
 

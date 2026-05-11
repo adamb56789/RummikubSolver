@@ -7,7 +7,7 @@ from typing import Callable
 
 from rummi_cube.rummi import find_best_move, InfeasibleSolutionException
 from rummi_cube.structs import ALL_TILES_STRINGS_WITH_JOKERS, Tile, Tileset, RummiResult, Config, JokerMode, \
-    MaximizeMode, COLOURS
+    OptimizeMode, COLOURS
 
 
 class EmptyBagException(Exception):
@@ -117,7 +117,7 @@ joker_mode = JokerMode.LOCKING
 def enter_asap(rack: list[Tile], table: list[Tileset]) -> RummiResult:
     # Enter the game ASAP, avoid placing jokers
 
-    config = Config(joker_mode, maximize_mode=MaximizeMode.VALUE_PLACED, joker_value=-100)
+    config = Config(joker_mode, optimize_mode=OptimizeMode.VALUE_PLACED, joker_value=-100)
     result = find_best_move(table, rack, config)
     if sum(ts.numerical_value_to_enter_game() for ts in result.table) >= 30:
         return result
@@ -131,7 +131,7 @@ def hoarder(table: list[Tileset], rack: list[Tile], entered_game: bool) -> Rummi
     else:
         # Do nothing unless we can place every tile in our rack
 
-        config = Config(joker_mode, maximize_mode=MaximizeMode.TILES_PLACED)
+        config = Config(joker_mode, optimize_mode=OptimizeMode.TILES_PLACED)
         result = find_best_move(table, rack, config)
 
         if len(result.remaining) == 0:
@@ -144,7 +144,7 @@ def max_tiles_every_time(table: list[Tileset], rack: list[Tile], entered_game: b
     if not entered_game:
         return enter_asap(rack, table)
     else:
-        config = Config(joker_mode, maximize_mode=MaximizeMode.TILES_PLACED)
+        config = Config(joker_mode, optimize_mode=OptimizeMode.TILES_PLACED)
         return find_best_move(table, rack, config)
 
 
@@ -152,7 +152,7 @@ def maximize_value_joker_value_one(table: list[Tileset], rack: list[Tile], enter
     if not entered_game:
         return enter_asap(rack, table)
     else:
-        config = Config(joker_mode, maximize_mode=MaximizeMode.VALUE_PLACED, joker_value=1)
+        config = Config(joker_mode, optimize_mode=OptimizeMode.VALUE_PLACED, joker_value=1)
         return find_best_move(table, rack, config)
 
 
@@ -161,18 +161,18 @@ def maximize_value_always_saves_joker(table: list[Tileset], rack: list[Tile], en
         return enter_asap(rack, table)
     else:
         # Always try to win by placing jokers
-        tiles_config = Config(joker_mode, maximize_mode=MaximizeMode.TILES_PLACED)
+        tiles_config = Config(joker_mode, optimize_mode=OptimizeMode.TILES_PLACED)
         max_tiles_result = find_best_move(table, rack, tiles_config)
 
         if not max_tiles_result.remaining:
             return max_tiles_result
 
         rack_tiles_to_play = [t for t in rack if not t.is_joker()]
-        value_config = Config(joker_mode, maximize_mode=MaximizeMode.VALUE_PLACED, joker_value=-1)
+        value_config = Config(joker_mode, optimize_mode=OptimizeMode.VALUE_PLACED, joker_value=-1)
         return find_best_move(table, rack_tiles_to_play, value_config)
 
 
-def remove_jokers_and_substitutions_from_rack(rack: list[Tile], table: list[Tileset]) -> list[Tile]:
+def remove_jokers_and_substitutions_from_rack(rack: list[Tile], table: list[Tileset]) -> tuple[list[Tile], list[Tile]]:
     # Find all tiles which could be used to substitute a joker on the table
     substitution_tiles: set[Tile] = set()
     for tileset in table:
@@ -191,7 +191,21 @@ def remove_jokers_and_substitutions_from_rack(rack: list[Tile], table: list[Tile
                     substitution_tiles.add(Tile(c, tileset.group_value).index())
 
     rack_tiles_to_play = [t for t in rack if not t.is_joker() and t not in substitution_tiles]
-    return rack_tiles_to_play
+    jokers_and_substitutes = [t for t in rack if t.is_joker() or t in substitution_tiles]
+    return rack_tiles_to_play, jokers_and_substitutes
+
+
+def entry_strategy(table: list[Tileset], rack: list[Tile]):
+    rack_to_play, ignored_tiles = remove_jokers_and_substitutions_from_rack(rack, table)
+
+    config = Config(joker_mode, optimize_mode=OptimizeMode.MINIMUM_NON_ZERO_PLACED, placed_value_minimum=30,
+                    joker_value=0)
+    try:
+        result = find_best_move(table, rack_to_play, config)
+        result.remaining.extend(ignored_tiles)  # Add the skipped tiles back in
+        return result
+    except InfeasibleSolutionException:
+        return RummiResult(table, [], rack)
 
 
 def maximize_value_always_saves_joker_and_joker_substitutes(table: list[Tileset], rack: list[Tile],
@@ -200,17 +214,17 @@ def maximize_value_always_saves_joker_and_joker_substitutes(table: list[Tileset]
         return enter_asap(rack, table)
     else:
         # Always try to win by placing jokers
-        tiles_config = Config(joker_mode, maximize_mode=MaximizeMode.TILES_PLACED)
+        tiles_config = Config(joker_mode, optimize_mode=OptimizeMode.TILES_PLACED)
         max_tiles_result = find_best_move(table, rack, tiles_config)
 
         if not max_tiles_result.remaining:
             return max_tiles_result
 
-        rack_tiles_to_play = remove_jokers_and_substitutions_from_rack(rack, table)
+        rack_tiles_to_play, ignored_tiles = remove_jokers_and_substitutions_from_rack(rack, table)
 
-        config = Config(joker_mode, maximize_mode=MaximizeMode.VALUE_PLACED, joker_value=-1)
+        config = Config(joker_mode, optimize_mode=OptimizeMode.VALUE_PLACED, joker_value=-1)
         result = find_best_move(table, rack_tiles_to_play, config)
-        result.remaining.extend(t for t in rack if t not in rack_tiles_to_play)  # Add the skipped tiles back in
+        result.remaining.extend(ignored_tiles)  # Add the skipped tiles back in
         return result
 
 
@@ -220,18 +234,18 @@ def minimum_non_zero_placed_always_saves_joker_and_joker_substitutes(table: list
         return enter_asap(rack, table)
     else:
         # Always try to win by placing jokers
-        tiles_config = Config(joker_mode, maximize_mode=MaximizeMode.TILES_PLACED)
+        tiles_config = Config(joker_mode, optimize_mode=OptimizeMode.TILES_PLACED)
         max_tiles_result = find_best_move(table, rack, tiles_config)
 
         if not max_tiles_result.remaining:
             return max_tiles_result
 
-        rack_tiles_to_play = remove_jokers_and_substitutions_from_rack(rack, table)
+        rack_tiles_to_play, ignored_tiles = remove_jokers_and_substitutions_from_rack(rack, table)
 
-        config = Config(joker_mode, maximize_mode=MaximizeMode.MINIMUM_NON_ZERO_PLACED, joker_value=-1)
+        config = Config(joker_mode, optimize_mode=OptimizeMode.MINIMUM_NON_ZERO_PLACED, joker_value=-1)
         try:
             result = find_best_move(table, rack_tiles_to_play, config)
-            result.remaining.extend(t for t in rack if t not in rack_tiles_to_play) # Add the skipped tiles back in
+            result.remaining.extend(ignored_tiles)  # Add the skipped tiles back in
             return result
         except InfeasibleSolutionException:
             return RummiResult(table, [], rack)
