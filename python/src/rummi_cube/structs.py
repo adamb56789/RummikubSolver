@@ -13,7 +13,7 @@ class Tile:
     value: int
 
     def __repr__(self):
-        return f'{self.colour}{self.value}'
+        return f'{self.colour}{"" if self.is_joker() else self.value}'
 
     def __lt__(self, other):
         if self.colour == other.colour:

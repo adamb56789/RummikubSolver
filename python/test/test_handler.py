@@ -48,3 +48,15 @@ class TestLambdaHandler(TestCase):
                                   None)
 
         self.assertEqual(response["statusCode"], 200, response)
+
+    def test_JJJ(self):
+        response = lambda_handler(get_test_event("/solve", ["J J J"], "a10 b10 r10", "maximum_tiles"),
+                                  None)
+
+        self.assertEqual(response["statusCode"], 400, response)
+
+    def test_ambiguous(self):
+        response = lambda_handler(
+            get_test_event("/solve", ["J J a1"], "a1", "maximize_value"), None)
+
+        self.assertEqual(response["statusCode"], 200, response)

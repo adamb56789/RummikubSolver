@@ -163,6 +163,16 @@ button:hover {
     color: #374151;
 }
 
+.info-box {
+    background: #eff6ff;
+    border-left: 4px solid #2563eb;
+    color: #1e3a8a;
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    line-height: 1.5;
+}
+
 </style>
 </head>
 """
@@ -193,6 +203,7 @@ def home_page():
                     name="rack"
                     placeholder="Example: r1 r2 r3 b5 a5 y5 J"
                     autocomplete="off"
+                    required
                 >
 
                 <div class="help">
@@ -206,6 +217,7 @@ def home_page():
                     name="table"
                     placeholder="One set per line&#10;Example:&#10;r1 r2 r3&#10;b7 a7 r7"
                     autocomplete="off"
+                    required
                 ></textarea>
 
                 <div class="help">
@@ -318,6 +330,14 @@ def display_result(result: RummiResult, previous_table: list[Tileset]):
         str(result.placed).strip('[]').replace(',', '')
     )
 
+    no_move_banner = ""
+    if not result.placed:
+        no_move_banner = """
+        <div class="info-box">
+            <strong>Pick up a tile.</strong>
+        </div>
+        """
+
     return f"""
         {HEADER}
 
@@ -326,6 +346,8 @@ def display_result(result: RummiResult, previous_table: list[Tileset]):
 
         <div class="card">
             <h1>Rummi Solver</h1>
+
+            {no_move_banner}
 
             <div class="remaining">
                 <strong>Tiles remaining:</strong><br>
@@ -347,10 +369,10 @@ def display_result(result: RummiResult, previous_table: list[Tileset]):
 
         </div>
         </div>
+
         </body>
         </html>
         """
-
 def error_page(message: str):
     return f"""
     {HEADER}

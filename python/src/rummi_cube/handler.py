@@ -1,4 +1,5 @@
 import re
+from collections import Counter
 from typing import Iterable
 
 from aws_lambda_powertools.utilities.data_classes import LambdaFunctionUrlEvent, event_source
@@ -7,7 +8,6 @@ from rummi_cube.rummi import TILES
 from rummi_cube.strategies import maximize_value_always_saves_joker_and_joker_substitutes, \
     minimum_non_zero_placed_always_saves_joker_and_joker_substitutes, entry_strategy
 from rummi_cube.structs import Tile, Tileset
-from rummi_cube.tileset_generation import generate_all_groups
 from rummi_cube.website import home_page, display_result, error_page
 
 
@@ -40,10 +40,10 @@ def handle_event(event: LambdaFunctionUrlEvent):
 
     strategy = event.query_string_parameters.get("strategy")
     table_string = event.query_string_parameters.get("table", "")
-    rack_string = event.query_string_parameters.get("rack")
+    rack_string = event.query_string_parameters.get("rack").strip()
 
     if not rack_string:
-        raise ClientError("Missing rack parameter")
+        raise ClientError("rack is missing or empty")
 
     rack_string = rack_string.lower().replace("j", "J")
 
@@ -64,11 +64,17 @@ def handle_event(event: LambdaFunctionUrlEvent):
         if line.strip()
     ]
 
+    if len(tileset_strings) > (len(TILES) * 2)//3 or sum(len(s.split(" ")) for s in tileset_strings) > len(TILES) * 2:
+        raise ClientError("Table too big")
+
     # Definitely not bulletproof input validation but good enough to catch typos
     table = []
     for tileset_string in tileset_strings:
         if not tile_string_is_valid(tileset_string):
             raise ClientError(f"Invalid tileset: {tileset_string}")
+
+        if all((not c.isalpha()) or c == "J" for c in tileset_string):
+            raise ClientError(f"tileset_string is not a valid tileset")
 
         tileset = Tileset.from_str(tileset_string)
 
@@ -78,7 +84,7 @@ def handle_event(event: LambdaFunctionUrlEvent):
         if not tile_values_in_range(tileset):
             raise ClientError("Tile values must be between 1 and 13")
 
-        if tileset.is_group and tileset not in generate_all_groups():
+        if tileset.is_group and any(f > 1 and c != "J" for c, f in Counter(t.colour for t in tileset).items()):
             raise ClientError(f"{tileset} is not a valid tileset")
 
         if tileset.is_run:
@@ -99,9 +105,6 @@ def handle_event(event: LambdaFunctionUrlEvent):
         result = minimum_non_zero_placed_always_saves_joker_and_joker_substitutes(table, rack, True)
     else:
         raise ClientError(f"{strategy} is not a strategy")
-
-    if not result.placed:
-        return "Pick up a tile"
 
     return display_result(result, table)
 
